@@ -25,3 +25,10 @@ Filter = linear
 ShadowMapScale = 2
 ; water reflection resolution at the highest setting: 1 = original 2048x1024, 2 = 4096x2048, 4 = 8192x4096 (GOG build 11757 only)
 ReflectionMapScale = 2
+; edge smoothing of the 3D scene (needs ImprovedPostFX = on and post effects enabled in the game options)
+FXAA = on
+; ambient occlusion: contact shadows under trees, houses and in corners (needs ImprovedPostFX = on)
+SSAO = on
+; SSAO darkness 0.0 - 1.0 and radius 0.25 - 4.0
+SSAOStrength = 0.6
+SSAORadius = 1.0

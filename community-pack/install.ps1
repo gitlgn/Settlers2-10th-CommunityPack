@@ -183,7 +183,17 @@ $t = Replace-Checked $t "#define RCP_BLUR_SAMPLES`t1 / NUM_BLUR_SAMPLES" ("#defi
 $t = Replace-Checked $t "`t`tresult += tex2D( Texture0, blurCoord );" "`t`tresult += tex2D( Texture0, blurCoord ) * g_BlurWeights[i];" "postprocess.fx blur"
 $t = Replace-Checked $t "`treturn result * RCP_BLUR_SAMPLES;" "`treturn result;" "postprocess.fx blur return"
 $t = Replace-Checked $t "(depth.r  - g_CamFocus.x) * g_CamFocus.y)" "(depth.r  - g_CamFocus.x) * g_CamFocus.y * DOF_STRENGTH)" "postprocess.fx dof"
+# FXAA + SSAO in the combine pass (switches: [Graphics] FXAA / SSAO, written to community_settings.inc by the DLL)
+$t = Replace-Checked $t "#define ADDRESS_MODE_V0 `tClamp" ("#define ADDRESS_MODE_V0 `tClamp`r`n#define ADDRESS_MODE_U1 `tClamp`r`n#define ADDRESS_MODE_V1 `tClamp`r`n" +
+    "#define ADDRESS_MODE_U2 `tClamp`r`n#define ADDRESS_MODE_V2 `tClamp`r`n#define FILTER_MODE_2 `tPoint") "postprocess.fx samplers"
+$t = Replace-Checked $t "#include `"shared.inc`"" "#include `"shared.inc`"`r`n#include `"community_postfx.inc`"" "postprocess.fx include"
+$t = Replace-Checked $t "`tfloat4`tcolor`t= tex2D( Texture1, IN.texcoord1 );`t// normal scene" ("`tfloat4`tcolor`t= tex2D( Texture1, IN.texcoord1 );`t// normal scene`r`n" +
+    "`tcolor.rgb`t= CP_SceneColor( IN.texcoord1 );`t// community pack: FXAA") "postprocess.fx fxaa"
+$t = Replace-Checked $t "`treturn lerp( blur, color, dof.xxxx );" ("`tfloat4`tresult`t= lerp( blur, color, dof.xxxx );`r`n" +
+    "`tresult.rgb`t*= CP_AmbientOcclusion( IN.texcoord1 );`t// community pack: SSAO`r`n`treturn result;") "postprocess.fx ssao"
+$t = Replace-Checked $t "compile ps_2_0 ColorAndLuminance" "compile ps_2_b ColorAndLuminance" "postprocess.fx profile"
 Write-PackFile "postfx" "gfx\fx_20\postprocess.fx" $t
+Write-PackFile "postfx" "gfx\fx_20\community_postfx.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_postfx.inc")))
 
 # smooth_shadows: 3x3 PCF (16 taps) in every shader that receives shadows; needs ps_2_b (any Shader Model 3 GPU)
 Reset-Pack "smooth_shadows"

@@ -24,7 +24,9 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Spiegelungen | `[Graphics] ReflectionMapScale = 2` | Wasserspiegelung 4096×2048 statt 2048×1024. |
 | Sichtweite | `[Mods] LODFix` | Weniger Aufpoppen beim Herauszoomen (Werte aus dem 4K-Projekt). |
 | Nachbearbeitung | `[Mods] ImprovedPostFX` | Gauß-Weichzeichner für Bloom, sanftere Tiefenunschärfe. |
-| 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. |
+| Kantenglättung | `[Graphics] FXAA = on` | FXAA für die 3D-Szene (braucht `ImprovedPostFX` und eingeschaltete Nachbearbeitung im Spiel). |
+| Umgebungsverdeckung | `[Graphics] SSAO = on` | Kontaktschatten unter Bäumen, Häusern und in Ecken; Stärke `SSAOStrength` (0–1), Radius `SSAORadius` (0.25–4). |
+| 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. **Ungetestet** über 2 GB Speicherverbrauch (Spiel startet und läuft normal). |
 
 Jede Funktion lässt sich einzeln abschalten (`off` bzw. `1`/`1.0`); nach dem nächsten Spielstart sind die Originaldateien automatisch wieder aktiv.
 
@@ -81,7 +83,9 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Reflections | `[Graphics] ReflectionMapScale = 2` | Water reflection 4096×2048 instead of 2048×1024. |
 | View distance | `[Mods] LODFix` | Less pop-in when zoomed out. |
 | Post-processing | `[Mods] ImprovedPostFX` | Gaussian bloom blur, softer depth of field. |
-| 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. |
+| Anti-aliasing | `[Graphics] FXAA = on` | FXAA on the 3D scene (needs `ImprovedPostFX` and post effects enabled in the game options). |
+| Ambient occlusion | `[Graphics] SSAO = on` | Contact shadows under trees, houses and in corners; `SSAOStrength` (0–1), `SSAORadius` (0.25–4). |
+| 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. **Untested** above 2 GB memory use (game starts and runs normally). |
 
 ### Requirements (starting from a vanilla game)
 

@@ -30,6 +30,7 @@ Copy-Item "$root\build\bin\Release\d3d9.dll" $pack
 foreach ($f in "install.ps1", "install.cmd", "uninstall.ps1", "uninstall.cmd", "d3d9.ini.sections", "README.md", "THIRD-PARTY.md") {
     Copy-Item (Join-Path $PSScriptRoot $f) $pack
 }
+Copy-Item (Join-Path $PSScriptRoot "shaders") "$pack\shaders" -Recurse
 Copy-Item "$root\LICENSE" "$pack\LICENSE.txt"
 Copy-Item "$Decrypter\target\release\decryptor_s2_bin.exe" "$pack\tools\decryptor_s2.exe"
 Copy-Item "$Decrypter\LICENSE" "$pack\tools\decryptor_s2.LICENSE.txt"

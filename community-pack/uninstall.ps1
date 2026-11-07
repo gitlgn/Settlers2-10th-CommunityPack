@@ -36,6 +36,8 @@ if (Test-Path "$Bin\d3d9.dll.communitypatch") {
     Write-Host "previous d3d9.dll restored"
 }
 
+Remove-Item (Join-Path $Data "gfx\fx_20\community_settings.inc") -ErrorAction SilentlyContinue
+
 if (Test-Path "$Bin\S2DNG.exe.laa") {
     # clear the large-address-aware flag again (restores the original S2DNG.exe byte for byte)
     $exe = [IO.File]::ReadAllBytes("$Bin\S2DNG.exe")

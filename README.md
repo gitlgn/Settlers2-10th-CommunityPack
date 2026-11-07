@@ -17,7 +17,9 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 💧 | **Reflection resolution** – water reflection 4096×2048 instead of 2048×1024 | `2` |
 | 🌲 | **View distance** – less LOD pop-in when zoomed out | on |
 | ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
-| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content) | on |
+| 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
+| 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
+| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; game starts and runs normally, but not stress-tested above 2 GB) | on |
 | 🛠️ | **Crash diagnostics** – minidump + log on crashes (`DebugMode`) | off |
 
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
@@ -67,6 +69,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/GfxPatches.*` | shadow map / reflection render target size patches |
 | `source/ModSync.*` | switchable data packs under `<game>\mods` with automatic backup/restore |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
+| `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |
 | `community-pack/` | installer, uninstaller, ini template, release script, user README |
 
 ## Related community projects
