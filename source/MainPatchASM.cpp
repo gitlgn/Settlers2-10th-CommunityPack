@@ -34,12 +34,19 @@ namespace DecryptPatch {
     DWORD ret3;
     
     static bool IsEncrypted = false;
+
+    // name of the file this thread loaded last (used to recognise upscaled HUD textures)
+    static thread_local char LastLoadedFile[MAX_PATH] = "";
+    const char* lastLoadedFile() { return LastLoadedFile; }
+    void clearLastLoadedFile() { LastLoadedFile[0] = 0; }
     
     void lolol2() {
         Stringbla* ptr = (Stringbla*)FilenamePtr;
         char* filebuffer = *(char**)FilebufferPtr;
     
         IsEncrypted = strncmp(filebuffer + 0x4, "rc00", 4) == 0;
+        if (ptr && ptr->filename)
+            strncpy_s(LastLoadedFile, ptr->filename, _TRUNCATE);
     
         logger.debug() << "-- loading: " 
             << (IsEncrypted ? "encrypted" : "raw")

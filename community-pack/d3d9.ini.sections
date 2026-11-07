@@ -1,0 +1,27 @@
+[Mods]
+; data packs in <game>\mods\<name>, built by install.cmd from your own game files
+; on/off here, restart the game after changing (originals are restored automatically)
+; HD textures (S2-modders 4k remakes, ~700 MB, needs a GPU with enough VRAM)
+HDTextures     = on
+; 2x upscaled interface textures (Real-ESRGAN), sharper HUD together with [UI] Scale
+HDInterface    = on
+; view distance / LOD fix (less pop-in when zoomed out)
+LODFix         = on
+; 32-bit shadow and depth maps instead of 16-bit (engine flag lowresDepthMap = false)
+SharpShadows   = on
+; soft shadow edges: 3x3 PCF in all shaders (needs a Shader Model 3 GPU)
+SmoothShadows  = on
+; gaussian bloom/blur and softer depth of field
+ImprovedPostFX = on
+
+[UI]
+; HUD scaling for high resolutions: 1.0 = off, e.g. 1.25 / 1.5 / 2.0 (GOG build 11757 only)
+Scale = 1.5
+; texture filter for the scaled HUD: linear (smooth) or point (sharp, uneven pixels unless Scale is a whole number)
+Filter = linear
+
+[Graphics]
+; shadow map resolution at the highest shadow setting: 1 = original 2048x2048, 2 = 4096x4096, 4 = 8192x8192 (GOG build 11757 only)
+ShadowMapScale = 2
+; water reflection resolution at the highest setting: 1 = original 2048x1024, 2 = 4096x2048, 4 = 8192x4096 (GOG build 11757 only)
+ReflectionMapScale = 2

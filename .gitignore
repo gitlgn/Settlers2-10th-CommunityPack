@@ -28,3 +28,5 @@ data/d3d9vk*
 build/
 
 Makefile
+
+dist/

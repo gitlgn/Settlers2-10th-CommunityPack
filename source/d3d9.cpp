@@ -11,8 +11,12 @@
 #include "f_d3d9.h"
 
 #include "Config.h"
+#include "CrashDiag.h"
 #include "Lobby.h"
 #include "MainPatch.h"
+#include "ModSync.h"
+#include "UIScale.h"
+#include "GfxPatches.h"
 
 #include <thread>
 
@@ -25,6 +29,7 @@ float fFPSLimit;
 
 HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRect, HWND hDestWindowOverride, CONST RGNDATA *pDirtyRegion)
 {
+
     if (bFPSLimit)
     {
         static LARGE_INTEGER PerformanceCount1;
@@ -114,6 +119,10 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
     HRESULT hr = f_pD3D->CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
 
     // NOTE: initialize your custom D3D components here
+    if (SUCCEEDED(hr)) {
+        UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
+        GfxPatches::onDeviceCreated();
+    }
 
     return hr;
 }
@@ -274,6 +283,28 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
         auto* settings = new PatchSettings(gameSettings, cameraData, lobbySettings);
         settings->gameVersion = getGameVersion(mainExecutable);
 
+        // community pack modules; their log files are only written with [Misc] DebugMode = on
+        {
+            const bool debug = gameSettings->bDebugMode;
+            auto logPath = [&](const char* name, char* buf) -> const char* {
+                if (!debug) return nullptr;
+                getGameDirectory(baseModule, buf, MAX_PATH, name, 1);
+                remove(buf);
+                return buf;
+            };
+            char diagLog[MAX_PATH], uiLog[MAX_PATH], gfxLog[MAX_PATH], modLog[MAX_PATH];
+
+            if (debug)
+                CrashDiag::install(logPath("\\bin\\crashdiag.log", diagLog));
+
+            UIScale::init(configPath, logPath("\\bin\\uiscale.log", uiLog));
+            GfxPatches::init(configPath, logPath("\\bin\\gfxpatches.log", gfxLog));
+
+            // data packs (HD textures, shaders, ...) must be in place before the game loads any data
+            char gameRoot[MAX_PATH];
+            getGameDirectory(baseModule, gameRoot, MAX_PATH, "", 1);
+            ModSync::apply(gameRoot, configPath, logPath("\\bin\\modsync.log", modLog));
+        }
         Logging::Logger logger("DX9", logFile, gameSettings->bDebugWindow);
         MainPatch::startupMessage();
 
@@ -375,6 +406,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
         break;
     }
     case DLL_PROCESS_DETACH:
+        CrashDiag::onProcessDetach(lpReserved);   // no-op unless installed (DebugMode)
         HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, bridgeProcessInfo.dwProcessId);
         if (hProcess != NULL) {
             TerminateProcess(hProcess, 0);
@@ -593,7 +625,12 @@ HRESULT f_IDirect3DDevice9::CreateRenderTarget(THIS_ UINT Width, UINT Height, D3
 
 HRESULT f_IDirect3DDevice9::CreateTexture(THIS_ UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9** ppTexture, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
+    if (SUCCEEDED(hr) && ppTexture) {
+        GfxPatches::onCreateTexture(Width, Height, Usage, Format, *ppTexture);
+        UIScale::onCreateTexture(Width, Height, Usage, Pool, *ppTexture);
+    }
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::CreateVertexBuffer(THIS_ UINT Length, DWORD Usage, DWORD FVF, D3DPOOL Pool, IDirect3DVertexBuffer9** ppVertexBuffer, HANDLE* pSharedHandle)
@@ -881,22 +918,34 @@ HRESULT f_IDirect3DDevice9::SetPixelShader(THIS_ IDirect3DPixelShader9* pShader)
 
 HRESULT f_IDirect3DDevice9::DrawIndexedPrimitive(THIS_ D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount)
 {
-    return f_pD3DDevice->DrawIndexedPrimitive(Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+    bool hud = UIScale::begin(f_pD3DDevice, { nullptr, 0, (UINT)(BaseVertexIndex + (INT)MinVertexIndex), NumVertices });
+    HRESULT hr = f_pD3DDevice->DrawIndexedPrimitive(Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+    if (hud) UIScale::end(f_pD3DDevice);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT MinIndex, UINT NumVertices, UINT PrimitiveCount, CONST void *pIndexData, D3DFORMAT IndexDataFormat, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-    return f_pD3DDevice->DrawIndexedPrimitiveUP(PrimitiveType, MinIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+    bool hud = UIScale::begin(f_pD3DDevice, { pVertexStreamZeroData, VertexStreamZeroStride, MinIndex, NumVertices });
+    HRESULT hr = f_pD3DDevice->DrawIndexedPrimitiveUP(PrimitiveType, MinIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+    if (hud) UIScale::end(f_pD3DDevice);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount)
 {
-    return f_pD3DDevice->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
+    bool hud = UIScale::begin(f_pD3DDevice, { nullptr, 0, StartVertex, UIScale::vertexCount(PrimitiveType, PrimitiveCount) });
+    HRESULT hr = f_pD3DDevice->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
+    if (hud) UIScale::end(f_pD3DDevice);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-    return f_pD3DDevice->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+    bool hud = UIScale::begin(f_pD3DDevice, { pVertexStreamZeroData, VertexStreamZeroStride, 0, UIScale::vertexCount(PrimitiveType, PrimitiveCount) });
+    HRESULT hr = f_pD3DDevice->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+    if (hud) UIScale::end(f_pD3DDevice);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::BeginScene()
@@ -911,6 +960,7 @@ HRESULT f_IDirect3DDevice9::GetStreamSource(THIS_ UINT StreamNumber, IDirect3DVe
 
 HRESULT f_IDirect3DDevice9::SetStreamSource(THIS_ UINT StreamNumber, IDirect3DVertexBuffer9* pStreamData, UINT OffsetInBytes, UINT Stride)
 {
+    UIScale::trackStream(StreamNumber, pStreamData, OffsetInBytes, Stride);
     return f_pD3DDevice->SetStreamSource(StreamNumber, pStreamData, OffsetInBytes, Stride);
 }
 
@@ -936,6 +986,8 @@ HRESULT f_IDirect3DDevice9::GetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTA
 
 HRESULT f_IDirect3DDevice9::SetTexture(DWORD Stage, IDirect3DBaseTexture9 *pTexture)
 {
+    GfxPatches::onSetTexture(Stage, pTexture);
+    UIScale::trackTexture(Stage, pTexture);
     return f_pD3DDevice->SetTexture(Stage, pTexture);
 }
 
@@ -991,6 +1043,7 @@ HRESULT f_IDirect3DDevice9::GetVertexShader(THIS_ IDirect3DVertexShader9** ppSha
 
 HRESULT f_IDirect3DDevice9::SetVertexShader(THIS_ IDirect3DVertexShader9* pShader)
 {
+    UIScale::trackVS(pShader);
     return f_pD3DDevice->SetVertexShader(pShader);
 }
 
@@ -1051,6 +1104,7 @@ HRESULT f_IDirect3DDevice9::GetVertexShaderConstantB(THIS_ UINT StartRegister, B
 
 HRESULT f_IDirect3DDevice9::SetVertexShaderConstantF(THIS_ UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount)
 {
+    UIScale::trackVSConst(StartRegister, pConstantData, Vector4fCount);
     return f_pD3DDevice->SetVertexShaderConstantF(StartRegister, pConstantData, Vector4fCount);
 }
 
@@ -1071,6 +1125,7 @@ HRESULT f_IDirect3DDevice9::GetVertexShaderConstantI(THIS_ UINT StartRegister, i
 
 HRESULT f_IDirect3DDevice9::SetFVF(THIS_ DWORD FVF)
 {
+    UIScale::trackFVF(FVF);
     return f_pD3DDevice->SetFVF(FVF);
 }
 
@@ -1086,6 +1141,7 @@ HRESULT f_IDirect3DDevice9::CreateVertexDeclaration(THIS_ CONST D3DVERTEXELEMENT
 
 HRESULT f_IDirect3DDevice9::SetVertexDeclaration(THIS_ IDirect3DVertexDeclaration9* pDecl)
 {
+    UIScale::trackDecl(pDecl);
     return f_pD3DDevice->SetVertexDeclaration(pDecl);
 }
 
@@ -1142,6 +1198,8 @@ HRESULT f_IDirect3DDevice9::GetSamplerState(THIS_ DWORD Sampler, D3DSAMPLERSTATE
 HRESULT f_IDirect3DDevice9::SetSamplerState(THIS_ DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value)
 {
     const int maxAnisotropy = 16;
+
+    UIScale::trackSampler(Sampler, Type, Value);
 
     if (Type == D3DSAMP_MAXANISOTROPY)
         return f_pD3DDevice->SetSamplerState(Sampler, Type, maxAnisotropy);
