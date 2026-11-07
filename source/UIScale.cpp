@@ -247,8 +247,63 @@ namespace UIScale {
         logf("HUD scaling %.2f, filter %s", g_scale, g_linear ? "linear" : "point");
     }
 
+    // ---- world -> screen projection (GOG 11757: 0x509E60, thiscall bool(vec3* out, const vec3* in)) ----
+    // D3DXVec3Project with the camera's REAL viewport. Its callers (building labels, markers, screen-distance
+    // tests against the mouse) all work in HUD coordinates, which are virtual while scaling is on.
+    static const DWORD PROJECT_ADDR = 0x00509E60;
+    static const BYTE  PROJECT_BYTES[] = { 0x56, 0x57, 0x8B, 0x7C, 0x24, 0x0C, 0x8B, 0xF1 };
+    static BYTE* g_projectTramp = nullptr;   // original first 6 bytes + jmp back
+
+    static void __cdecl projectToVirtual(float* out) {
+        LONG vw = g_virtW, vh = g_virtH;
+        if (!vw || !vh) return;
+        out[0] *= (float)vw / (float)g_realW;
+        out[1] *= (float)vh / (float)g_realH;
+    }
+
+    static void __declspec(naked) projectHook() {
+        __asm {
+            push dword ptr [esp + 8]      // in
+            push dword ptr [esp + 8]      // out
+            call g_projectTramp           // original (ecx = this), ret 8
+            test al, al
+            jz done
+            push eax
+            push dword ptr [esp + 8]      // out
+            call projectToVirtual
+            add esp, 4
+            pop eax
+        done:
+            ret 8
+        }
+    }
+
+    static bool patchProjection() {
+        if (memcmp((void*)PROJECT_ADDR, PROJECT_BYTES, sizeof(PROJECT_BYTES)) != 0) {
+            logf("world projection not found - building labels keep real-pixel positions");
+            return false;
+        }
+        BYTE* t = (BYTE*)VirtualAlloc(nullptr, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!t) return false;
+        memcpy(t, PROJECT_BYTES, 6);                                   // push esi; push edi; mov edi,[esp+0Ch]
+        t[6] = 0xE9;
+        *(DWORD*)(t + 7) = (PROJECT_ADDR + 6) - ((DWORD)t + 11);
+        g_projectTramp = t;
+        DWORD old;
+        if (!VirtualProtect((void*)PROJECT_ADDR, 6, PAGE_EXECUTE_READWRITE, &old)) return false;
+        BYTE* p = (BYTE*)PROJECT_ADDR;
+        p[0] = 0xE9;
+        *(DWORD*)(p + 1) = (DWORD)projectHook - (PROJECT_ADDR + 5);
+        p[5] = 0x90;
+        VirtualProtect((void*)PROJECT_ADDR, 6, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)PROJECT_ADDR, 6);
+        logf("world projection hooked (labels in HUD coordinates)");
+        return true;
+    }
+
     static void installHooks() {
         if (g_scaleOn && !patchSetter()) g_scaleOn = false;
+        if (g_scaleOn) patchProjection();
         g_on = g_scaleOn || !g_hdOrig.empty();
         if (g_on) logf("HUD hooks enabled (scaling %s, upscaled textures %u)", g_scaleOn ? "on" : "off", (unsigned)g_hdOrig.size());
     }
