@@ -9,6 +9,12 @@
 #include <Helper.h>
 #include "Config.h"
 
+#include <bcrypt.h>
+#include <cstdint>
+#include <fstream>
+#include <vector>
+#pragma comment(lib, "bcrypt.lib")
+
 GameSettings::GameSettings(CSimpleIniA& ini) {
     bHardwareCursor = !ini.GetBoolValue("Game", "CursorFix");
     fpsLimit = ini.GetLongValue("Game", "FPSLimit");
@@ -118,10 +124,32 @@ void GameSettings::writeDXconfig(char* path) {
     ofstr.close();
 }
 
+// checksum of the exe as shipped: the large-address-aware flag (set by the Community Pack installer) is ignored
+static bool getOriginalExeChecksum(char* exePath, std::string& checksum) {
+    std::ifstream file(exePath, std::ios::binary | std::ios::ate);
+    if (!file) return false;
+    size_t size = (size_t)file.tellg();
+    std::vector<char> buf(size);
+    file.seekg(0, std::ios::beg);
+    file.read(buf.data(), size);
+    if (size > 0x40) {
+        size_t o = (size_t)*(const int32_t*)(buf.data() + 0x3C) + 4 + 18;   // IMAGE_FILE_HEADER.Characteristics
+        if (o < size) buf[o] &= ~0x20;                                     // IMAGE_FILE_LARGE_ADDRESS_AWARE
+    }
+    // SHA-256 via Windows CNG (the helper library's sha256() lives in a header and cannot be included twice)
+    BYTE digest[32];
+    if (!BCRYPT_SUCCESS(BCryptHash(BCRYPT_SHA256_ALG_HANDLE, nullptr, 0, (PUCHAR)buf.data(), (ULONG)size, digest, sizeof(digest))))
+        return false;
+    char hex[65];
+    for (int i = 0; i < 32; i++) sprintf_s(hex + i * 2, 3, "%02x", digest[i]);
+    checksum = hex;
+    return true;
+}
+
 GameVersion getGameVersion(char* exePath) {
     std::string checksum;
 
-    if (!getFileChecksum(exePath, checksum)) {
+    if (!getOriginalExeChecksum(exePath, checksum)) {
         return V_UNKNOWN;
     }
 

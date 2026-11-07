@@ -24,6 +24,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Spiegelungen | `[Graphics] ReflectionMapScale = 2` | Wasserspiegelung 4096×2048 statt 2048×1024. |
 | Sichtweite | `[Mods] LODFix` | Weniger Aufpoppen beim Herauszoomen (Werte aus dem 4K-Projekt). |
 | Nachbearbeitung | `[Mods] ImprovedPostFX` | Gauß-Weichzeichner für Bloom, sanftere Tiefenunschärfe. |
+| 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. |
 
 Jede Funktion lässt sich einzeln abschalten (`off` bzw. `1`/`1.0`); nach dem nächsten Spielstart sind die Originaldateien automatisch wieder aktiv.
 
@@ -48,6 +49,7 @@ Weitere Projekte der Community, die du kennen solltest:
 2. Den Ordner `CommunityPack` in den Spielordner entpacken (neben `bin` und `data`).
 3. `CommunityPack\install.cmd` ausführen. Der Installer
    - sichert die bisherige `d3d9.dll` als `d3d9.dll.communitypatch` und installiert die neue,
+   - schaltet in `S2DNG.exe` 4 GB Speicher frei (ein Bit im Programmkopf, wird bei der Deinstallation zurückgesetzt),
    - ergänzt `bin\d3d9.ini` um die Abschnitte `[Mods]`, `[UI]`, `[Graphics]`,
    - entschlüsselt die nötigen Dateien **deines** Spiels, ändert sie und legt sie unter `mods\` ab,
    - fragt, ob HD-Texturen geladen und die Oberfläche hochgerechnet werden soll.
@@ -79,6 +81,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Reflections | `[Graphics] ReflectionMapScale = 2` | Water reflection 4096×2048 instead of 2048×1024. |
 | View distance | `[Mods] LODFix` | Less pop-in when zoomed out. |
 | Post-processing | `[Mods] ImprovedPostFX` | Gaussian bloom blur, softer depth of field. |
+| 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. |
 
 ### Requirements (starting from a vanilla game)
 

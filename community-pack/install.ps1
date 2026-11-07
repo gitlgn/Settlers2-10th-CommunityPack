@@ -52,7 +52,17 @@ if (Get-Process S2DNG -ErrorAction SilentlyContinue) { throw "Please close the g
 Say "Settlers II 10th Anniversary - Community Pack" Cyan
 Say "Game folder: $GameDir"
 
-$hash = (Get-FileHash "$Bin\S2DNG.exe" -Algorithm SHA256).Hash
+# PE header flag IMAGE_FILE_LARGE_ADDRESS_AWARE (0x20): lets the 32-bit game use 4 GB instead of 2 GB
+function Get-LAAOffset([byte[]]$b) { return [BitConverter]::ToInt32($b, 0x3C) + 4 + 18 }
+function Get-ExeHashWithoutLAA([string]$path) {
+    $b = [IO.File]::ReadAllBytes($path)
+    $o = Get-LAAOffset $b
+    $b[$o] = $b[$o] -band 0xDF
+    $sha = [Security.Cryptography.SHA256]::Create()
+    return ([BitConverter]::ToString($sha.ComputeHash($b)) -replace '-', '')
+}
+
+$hash = Get-ExeHashWithoutLAA "$Bin\S2DNG.exe"
 if ($hash -ne $GOG_11757_SHA256) {
     Say "Note: S2DNG.exe is not the GOG build 11757. Data packs will work, HUD scaling and the shadow/reflection" Yellow
     Say "      map size switches only support the GOG build and stay off." Yellow
@@ -66,6 +76,18 @@ $dllBackup = "$Bin\d3d9.dll.communitypatch"
 if ((Test-Path "$Bin\d3d9.dll") -and -not (Test-Path $dllBackup)) { Copy-Item "$Bin\d3d9.dll" $dllBackup }
 Copy-Item (Join-Path $PackDir "d3d9.dll") "$Bin\d3d9.dll" -Force
 Say "d3d9.dll installed (previous one kept as d3d9.dll.communitypatch)" Green
+
+# 4 GB address space (HD textures, large shadow maps and the Vulkan renderer need more than 2 GB)
+$exe = [IO.File]::ReadAllBytes("$Bin\S2DNG.exe")
+$o = Get-LAAOffset $exe
+if (($exe[$o] -band 0x20) -eq 0) {
+    $exe[$o] = $exe[$o] -bor 0x20
+    [IO.File]::WriteAllBytes("$Bin\S2DNG.exe", $exe)
+    Set-Content "$Bin\S2DNG.exe.laa" "Large-address-aware flag set by the Community Pack; uninstall.cmd clears it again."
+    Say "S2DNG.exe: 4 GB memory (large address aware) enabled" Green
+} else {
+    Say "S2DNG.exe: 4 GB memory already enabled" Green
+}
 
 $ini = Get-Content "$Bin\d3d9.ini" -Raw
 $template = Get-Content (Join-Path $PackDir "d3d9.ini.sections") -Raw

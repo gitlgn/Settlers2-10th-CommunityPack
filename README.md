@@ -17,6 +17,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 💧 | **Reflection resolution** – water reflection 4096×2048 instead of 2048×1024 | `2` |
 | 🌲 | **View distance** – less LOD pop-in when zoomed out | on |
 | ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
+| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content) | on |
 | 🛠️ | **Crash diagnostics** – minidump + log on crashes (`DebugMode`) | off |
 
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
@@ -29,7 +30,7 @@ switched-off packs restore the original files on the next start.
 3. Download `S2DNG-CommunityPack-<version>.zip` from [Releases](../../releases), extract the `CommunityPack` folder into the game folder (next to `bin` and `data`).
 4. Run `CommunityPack\install.cmd` and start the game.
 
-Uninstall: `CommunityPack\uninstall.cmd`. Full user guide (Deutsch / English): [community-pack/README.md](community-pack/README.md).
+Uninstall: `CommunityPack\uninstall.cmd` (also restores the original `S2DNG.exe`). Full user guide (Deutsch / English): [community-pack/README.md](community-pack/README.md).
 
 ## Build it yourself
 

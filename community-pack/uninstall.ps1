@@ -36,6 +36,16 @@ if (Test-Path "$Bin\d3d9.dll.communitypatch") {
     Write-Host "previous d3d9.dll restored"
 }
 
+if (Test-Path "$Bin\S2DNG.exe.laa") {
+    # clear the large-address-aware flag again (restores the original S2DNG.exe byte for byte)
+    $exe = [IO.File]::ReadAllBytes("$Bin\S2DNG.exe")
+    $o = [BitConverter]::ToInt32($exe, 0x3C) + 4 + 18
+    $exe[$o] = $exe[$o] -band 0xDF
+    [IO.File]::WriteAllBytes("$Bin\S2DNG.exe", $exe)
+    Remove-Item "$Bin\S2DNG.exe.laa"
+    Write-Host "S2DNG.exe: 4 GB flag removed"
+}
+
 if ($Purge -and $failed -eq 0 -and (Test-Path $Mods)) { Remove-Item $Mods -Recurse -Force; Write-Host "mods folder removed" }
 if ($failed) { Write-Host "$failed file(s) could not be restored - see above" -ForegroundColor Yellow }
 else { Write-Host "Done / Fertig." -ForegroundColor Cyan }
