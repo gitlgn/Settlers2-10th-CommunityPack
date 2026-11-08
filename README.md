@@ -25,6 +25,17 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
 switched-off packs restore the original files on the next start.
 
+## Showcase
+
+Same savegame, 3440×1440. Click an image for full resolution.
+
+**Community Patch 2.3 only**
+
+![Community Patch 2.3 only](data/images/community/vanilla.jpg)
+
+**With the Community Pack** – scaled and upscaled HUD and fonts, 4K textures, soft shadows, FXAA, SSAO
+
+![With the Community Pack](data/images/community/communitypack.jpg)
 ## Install (players)
 
 1. Game: **GOG version** (build 11757) – retail/Gold edition updated to patch 11757 works for the data packs.
