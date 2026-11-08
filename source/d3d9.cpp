@@ -12,6 +12,7 @@
 
 #include "Config.h"
 #include "CrashDiag.h"
+#include "LAAStress.h"
 #include "Lobby.h"
 #include "MainPatch.h"
 #include "ModSync.h"
@@ -293,6 +294,11 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
                 return buf;
             };
             char diagLog[MAX_PATH], uiLog[MAX_PATH], gfxLog[MAX_PATH], modLog[MAX_PATH];
+
+            // must run first: reserves the address space below 2 GB before anything else allocates
+            char laaLog[MAX_PATH];
+            getGameDirectory(baseModule, laaLog, MAX_PATH, "\\bin\\laastress.log", 1);
+            LAAStress::install(configPath, laaLog);
 
             if (debug)
                 CrashDiag::install(logPath("\\bin\\crashdiag.log", diagLog));

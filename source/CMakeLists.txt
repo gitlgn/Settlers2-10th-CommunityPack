@@ -17,6 +17,7 @@ add_library(${PROJECT_NAME} SHARED
 	MainPatch.cpp
 	MainPatchASM.cpp
 	CrashDiag.cpp
+	LAAStress.cpp
 	ModSync.cpp
 	UIScale.cpp
 	GfxPatches.cpp

@@ -19,7 +19,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
 | 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
-| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; game starts and runs normally, but not stress-tested above 2 GB) | on |
+| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: game code runs with its memory above 2 GB – only the game's shader compiler d3dx9_29 cannot, see notes) | on |
 | 🛠️ | **Crash diagnostics** – minidump + log on crashes (`DebugMode`) | off |
 
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
@@ -79,6 +79,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/UIScale.*`, `uiscale_vs.hlsl` | HUD scaling (virtual HUD size, vertex shader for pre-transformed vertices), HD interface texture handling |
 | `source/GfxPatches.*` | shadow map / reflection render target size patches |
 | `source/ModSync.*` | switchable data packs under `<game>\mods` with automatic backup/restore |
+| `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
 | `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |
 | `community-pack/` | installer, uninstaller, ini template, release script, user README |

@@ -26,7 +26,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Nachbearbeitung | `[Mods] ImprovedPostFX` | Gauß-Weichzeichner für Bloom, sanftere Tiefenunschärfe. |
 | Kantenglättung | `[Graphics] FXAA = on` | FXAA für die 3D-Szene (braucht `ImprovedPostFX` und eingeschaltete Nachbearbeitung im Spiel). |
 | Umgebungsverdeckung | `[Graphics] SSAO = on` | Kontaktschatten unter Bäumen, Häusern und in Ecken; Stärke `SSAOStrength` (0–1), Radius `SSAORadius` (0.25–4). |
-| 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. **Ungetestet** über 2 GB Speicherverbrauch (Spiel startet und läuft normal). |
+| 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. Getestet (siehe Hinweise). |
 
 Jede Funktion lässt sich einzeln abschalten (`off` bzw. `1`/`1.0`); nach dem nächsten Spielstart sind die Originaldateien automatisch wieder aktiv.
 
@@ -63,6 +63,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 
 - **Mehrspieler:** Die Pakete ändern nur Grafik und Oberfläche. Gemischte Installationen (mit/ohne Pack) sind nicht getestet – am besten installieren alle Mitspieler dieselben Pakete.
 - Die Originaldateien liegen unter `mods\_backup` – nicht löschen, solange Pakete aktiv sind.
+- **4 GB Speicher:** Mit `[Misc] LAAStressTest = on` blockiert die DLL `LAAStressDelay` Sekunden nach dem Start (Standard 120) den Adressraum unter 2 GB, sodass neuer Speicher darüber landen muss; Protokoll `bin\laastress.log`. Ergebnis: Eine Partie lief 18 Minuten stabil mit bis zu 176 MB Spieldaten über 2 GB. **Einschränkung:** Der Shader-Compiler des Spiels (`d3dx9_29.dll`) scheitert mit `E_OUTOFMEMORY`, wenn sein Speicher über 2 GB liegt. Shader werden beim Start kompiliert, daher im Normalbetrieb kein Problem; wer im laufenden Spiel bei über 2 GB Verbrauch die Grafikoptionen ändert, kann die Meldung bekommen – ohne 4-GB-Flag wäre das Spiel an dieser Stelle ohnehin am Speicherlimit.
 - Fehlersuche: `[Misc] DebugMode = on` schreibt Protokolle nach `bin\` (`modsync.log`, `uiscale.log`, `gfxpatches.log`, `crashdiag.log`).
 
 ---
@@ -85,13 +86,15 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Post-processing | `[Mods] ImprovedPostFX` | Gaussian bloom blur, softer depth of field. |
 | Anti-aliasing | `[Graphics] FXAA = on` | FXAA on the 3D scene (needs `ImprovedPostFX` and post effects enabled in the game options). |
 | Ambient occlusion | `[Graphics] SSAO = on` | Contact shadows under trees, houses and in corners; `SSAOStrength` (0–1), `SSAORadius` (0.25–4). |
-| 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. **Untested** above 2 GB memory use (game starts and runs normally). |
+| 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. Tested, see notes below. |
 
 ### Requirements (starting from a vanilla game)
 
 1. *The Settlers II – 10th Anniversary*, preferably the **GOG version** (build 11757). Retail/Gold: update to patch 11757; data packs work, HUD scaling and shadow/reflection resolution are GOG-only and switch themselves off otherwise.
 2. **Community Patch 2.3**: [S2-modders/Settlers-DNG-Patches releases](https://github.com/S2-modders/Settlers-DNG-Patches/releases) – widescreen, zoom, Vulkan/DXVK and the multiplayer lobby. This pack builds on it and only replaces its `d3d9.dll` with an extended build.
 3. A Shader Model 3 GPU with a Vulkan driver.
+
+**4 GB memory test:** `[Misc] LAAStressTest = on` blocks the address space below 2 GB `LAAStressDelay` seconds after start (default 120), so new memory must go above 2 GB; log `bin\laastress.log`. Result: an 18-minute game ran stable with up to 176 MB of game data above 2 GB. **Limitation:** the game's shader compiler (`d3dx9_29.dll`) fails with `E_OUTOFMEMORY` when its memory lies above 2 GB. Shaders are compiled at startup, so normal play is fine; changing graphics options mid-game above 2 GB memory use may show the error – without the flag the game would be out of memory at that point anyway.
 
 See the German section for related community projects (lobby emulator, decrypter, map format, 4K texture sources).
 
