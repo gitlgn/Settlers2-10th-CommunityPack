@@ -36,3 +36,10 @@ SSAORadius = 1.0
 [Misc]
 ; community pack: mesh cache (faster loading). Cleared automatically after a crash, switched off if its folder is not writable
 MeshCache = on
+; community pack: fixes for bugs of the original game (GOG 11757)
+; clocks count from game start instead of Windows start (animations stay smooth with long PC uptime)
+TimeFix = on
+; profiles and savegames are written to a temporary file first (no damaged files after a crash while saving)
+SafeSave = on
+; multiplayer robustness: network buffer overflow, unchecked indices in game commands, commands of players who left
+GameFixes = on

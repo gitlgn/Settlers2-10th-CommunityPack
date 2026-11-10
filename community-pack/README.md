@@ -24,6 +24,9 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Spiegelungen | `[Graphics] ReflectionMapScale = 2` | Wasserspiegelung 4096×2048 statt 2048×1024. |
 | Sichtweite | `[Mods] LODFix` | Weniger Aufpoppen beim Herauszoomen (Werte aus dem 4K-Projekt). |
 | Nachbearbeitung | `[Mods] ImprovedPostFX` | Gauß-Weichzeichner für Bloom, sanftere Tiefenunschärfe. |
+| Uhren-Fix | `[Misc] TimeFix = on` | Fehler im Spiel: Die Uhren zählen ab Windows-Start und werden als 32-Bit-Kommazahl gespeichert – Animationen und Timer werden bei langer PC-Laufzeit grob. Jetzt zählen sie ab Spielstart. |
+| Sicheres Speichern | `[Misc] SafeSave = on` | Fehler im Spiel: Profile und Spielstände wurden direkt überschrieben; ein Absturz beim Speichern hinterließ eine leere Datei. Jetzt erst in eine Temp-Datei, dann ersetzt. Protokoll `bin\safesave.log` (mit `DebugMode`). |
+| Mehrspieler-Fixes | `[Misc] GameFixes = on` | Fehler im Spiel: Pufferüberlauf beim Netzwerkempfang, ungeprüfte Werte in Spielbefehlen, Befehle von Spielern, die die Partie verlassen haben. Alle Mitspieler sollten dieselbe Version nutzen. |
 | Profil-Schutz | (immer an) | Sichert bei jedem Start dein Profil (Einstellungen, Kampagnen-Fortschritt) nach `Documents\S2\users\backup` und stellt es automatisch wieder her, wenn es beschädigt ist – bekannter Fehler: alles zurückgesetzt, nur Mission 1 frei. Protokoll in `bin\gameguard.log`. |
 | Mesh-Cache-Schutz | `[Misc] MeshCache = on` | Leert nach einem Absturz den Mesh-/Shader-Cache (`%LOCALAPPDATA%\S2`) und schaltet ihn ab, wenn der Ordner nicht beschreibbar ist – bekannte Ursache für Abstürze wenige Minuten nach Kartenstart. `off` schaltet den Cache ganz ab. |
 | Kantenglättung | `[Graphics] FXAA = on` | FXAA für die 3D-Szene (braucht `ImprovedPostFX` und eingeschaltete Nachbearbeitung im Spiel). |
@@ -66,6 +69,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 - **Mehrspieler:** Die Pakete ändern nur Grafik und Oberfläche. Gemischte Installationen (mit/ohne Pack) sind nicht getestet – am besten installieren alle Mitspieler dieselben Pakete.
 - Die Originaldateien liegen unter `mods\_backup` – nicht löschen, solange Pakete aktiv sind.
 - **4 GB Speicher:** Mit `[Misc] LAAStressTest = on` blockiert die DLL `LAAStressDelay` Sekunden nach dem Start (Standard 120) den Adressraum unter 2 GB, sodass neuer Speicher darüber landen muss; Protokoll `bin\laastress.log`. Ergebnis: Eine Partie lief 18 Minuten stabil mit bis zu 176 MB Spieldaten über 2 GB. **Einschränkung:** Der Shader-Compiler des Spiels (`d3dx9_29.dll`) scheitert mit `E_OUTOFMEMORY`, wenn sein Speicher über 2 GB liegt. Shader werden beim Start kompiliert, daher im Normalbetrieb kein Problem; wer im laufenden Spiel bei über 2 GB Verbrauch die Grafikoptionen ändert, kann die Meldung bekommen – ohne 4-GB-Flag wäre das Spiel an dieser Stelle ohnehin am Speicherlimit.
+- **Mehrspieler-Diagnose:** Mit `[Misc] DebugMode = on` schreibt die DLL zusätzlich `bin\nettrace.log` (empfangene Nachrichten, ausgeführte Spielbefehle, Mausklicks – die letzten 512 Ereignisse plus Statistik) bei einem Absturz und am Sitzungsende.
 - Fehlersuche: `[Misc] DebugMode = on` schreibt Protokolle nach `bin\` (`modsync.log`, `uiscale.log`, `gfxpatches.log`, `crashdiag.log`).
 
 ---
@@ -86,6 +90,9 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Reflections | `[Graphics] ReflectionMapScale = 2` | Water reflection 4096×2048 instead of 2048×1024. |
 | View distance | `[Mods] LODFix` | Less pop-in when zoomed out. |
 | Post-processing | `[Mods] ImprovedPostFX` | Gaussian bloom blur, softer depth of field. |
+| Clock fix | `[Misc] TimeFix = on` | Game bug: clocks count from Windows start and are stored as 32-bit floats – animations and timers get coarse with long PC uptime. Now they count from game start. |
+| Safe saving | `[Misc] SafeSave = on` | Game bug: profiles and savegames were overwritten in place; a crash while saving left an empty file. Now written to a temp file first, then replaced. |
+| Multiplayer fixes | `[Misc] GameFixes = on` | Game bugs: network buffer overflow, unchecked values in game commands, commands of players who left. All players should use the same version. |
 | Profile guard | (always on) | Backs up your profile (settings, campaign progress) to `Documents\S2\users\backup` at every start and restores it if it is damaged (known bug: everything reset, only mission 1 left). Log: `bin\gameguard.log`. |
 | Mesh cache guard | `[Misc] MeshCache = on` | Clears the mesh/shader cache (`%LOCALAPPDATA%\S2`) after a crash and disables it if the folder is not writable (known cause of crashes a few minutes into a map). `off` disables the cache. |
 | Anti-aliasing | `[Graphics] FXAA = on` | FXAA on the 3D scene (needs `ImprovedPostFX` and post effects enabled in the game options). |

@@ -22,11 +22,29 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: game code runs with its memory above 2 GB – only the game's shader compiler d3dx9_29 cannot, see notes) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
 | 🧹 | **Mesh cache guard** – clears the mesh/shader cache after a crash and disables it if its folder is not writable (known cause of crashes a few minutes into a map); `[Misc] MeshCache` | on |
+| ⏱️ | **Clock fix** – the game's clocks count from game start instead of Windows start; animations and timers no longer get coarse with long PC uptime; `[Misc] TimeFix` | on |
+| 🛟 | **Safe saving** – profiles and savegames are written to a temporary file and replace the old one only when complete; `[Misc] SafeSave` | on |
+| 🌐 | **Multiplayer robustness** – fixes a network buffer overflow and unchecked values in game commands; `[Misc] GameFixes` | on |
 | 🛠️ | **Crash diagnostics** – minidump + log on crashes (`DebugMode`) | off |
 
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
 switched-off packs restore the original files on the next start.
 
+## Fixes for the original game
+
+Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](https://github.com/morluto/rea) and Ghidra. Each patch checks the original bytes first and stays off on any other exe build.
+
+| Bug in the original game | Effect | Fix |
+|---|---|---|
+| Clocks count from Windows start and are stored as 32-bit floats (`0x55D850`, `0x4474C0`) | animation/timer precision drops with PC uptime: 2 ms steps after 4.7 h, 64 ms after 10 days | `TimeFix` – clocks count from game start |
+| Profiles and savegames are written in place (`CREATE_ALWAYS`, `0x448A90`) | a crash or power loss while saving leaves an empty file – settings and campaign progress lost ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_resets_all_progress_and_settings)) | `SafeSave` – temp file + atomic replace; `Profile guard` repairs files damaged earlier |
+| Network buffer append ignores a failed `realloc` (`0x412C50`) | received data overwrites the heap | `GameFixes` – data dropped instead |
+| Game command `0x2002F` writes with an unchecked index (`0x610390`) | a damaged command can overwrite memory outside a building | `GameFixes` – only valid indices (0–4) |
+| Game command `0x20022` uses an unchecked index (`0x60F6F0`) | access outside a 6-entry table | `GameFixes` – invalid commands ignored |
+| The player lookup of 21 command types has no range check (`0x454200`); a sender that no longer exists yields player -1 | access before the player table | `GameFixes` – such commands are skipped |
+| Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
+
+Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version.
 ## Showcase
 
 Same savegame, 3440×1440. Click an image for full resolution.
@@ -82,6 +100,8 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/GfxPatches.*` | shadow map / reflection render target size patches |
 | `source/ModSync.*` | switchable data packs under `<game>\mods` with automatic backup/restore |
 | `source/GameGuard.*` | profile backup/restore (`Documents\S2\users\backup`), mesh/shader cache guard (`%LOCALAPPDATA%\S2`) |
+| `source/TimeFix.*`, `source/SafeSave.*`, `source/BinaryFixes.*` | fixes for the original game (clocks, atomic saving, byte patches + command dispatcher check) |
+| `source/NetTrace.*` | multiplayer diagnostics (`DebugMode`): received messages, executed commands, mouse clicks → `bin\nettrace.log` |
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
 | `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |
