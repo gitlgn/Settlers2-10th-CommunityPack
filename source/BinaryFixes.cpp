@@ -49,7 +49,144 @@ namespace BinaryFixes {
             },
             4
         },
+        {
+            "stream read: size check without signed overflow (0x412CD0, savegames/maps/network)",
+            {
+                // 00412D14  int3 x12  ->  mov ecx,edi ; add ecx,eax ; jc fail ; cmp ecx,esi ; ja fail ; jmp 0x412CE5
+                { "check stub", 0x00412D14, { 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC }, { 0x8B, 0xCF, 0x03, 0xC8, 0x72, 0xF3, 0x3B, 0xCE }, 8 },
+                { "check stub 2", 0x00412D1C, { 0xCC, 0xCC, 0xCC, 0xCC }, { 0x77, 0xEF, 0xEB, 0xC5 }, 4 },
+                // 00412CDE  lea ecx,[edi+eax] ; cmp ecx,esi ; jg fail   (pos+size signed: a huge size passed)
+                //       ->  jmp 0x412D14 (check stub)
+                { "check", 0x00412CDE, { 0x8D, 0x0C, 0x07, 0x3B, 0xCE, 0x7F, 0x28 }, { 0xEB, 0x34, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC }, 7 },
+            },
+            3
+        },
     };
+
+    // ---- stream string read (thunk 0x412D80 -> 0x6D7E8C): 16-bit length from the data, signed, never checked
+    // against the remaining data -> reads past the buffer; a negative length becomes ~4 GB. The length in the
+    // stream is clamped to 0 .. remaining bytes before the original runs.
+    struct MemStream { void* vtbl; BYTE* data; int len; int pos; };
+    static const DWORD STRREAD_THUNK = 0x00412D80;
+    static const BYTE STRREAD_BYTES[] = { 0xE9, 0x07, 0x51, 0x2C, 0x00 };   // jmp 0x6D7E8C
+    static const DWORD STRREAD_REAL = 0x006D7E8C;
+    static volatile LONG g_clamped = 0;
+
+    static void __cdecl clampStringLength(MemStream* s) {
+        __try {
+            if (!s || !s->data || s->pos < 0 || s->pos + 2 > s->len) return;   // original reads length 0 then
+            short* p = (short*)(s->data + s->pos);
+            int rest = s->len - s->pos - 2;
+            if (*p < 0) { *p = 0; InterlockedIncrement(&g_clamped); }
+            else if (*p > rest) { *p = (short)rest; InterlockedIncrement(&g_clamped); }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    static void __declspec(naked) stringReadHook() {
+        __asm {
+            pushad
+            pushfd
+            push ecx
+            call clampStringLength
+            add esp, 4
+            popfd
+            popad
+            push STRREAD_REAL
+            ret
+        }
+    }
+
+    // ---- file stream string read (0x448B10, vtable of the file class): char buffer[0x800] on the stack,
+    // length read from the file (vcall +0x30) and passed unchecked to read (ReadFile) and buffer[len] = 0
+    // -> stack buffer overflow with a damaged/crafted map or savegame. Length clamped to 0..0x7FF.
+    static const DWORD FSTR_AT = 0x00448B39;                   // mov eax,[esp+4] ; mov edx,[esi]  (6 bytes)
+    static const BYTE FSTR_BYTES[] = { 0x8B, 0x44, 0x24, 0x04, 0x8B, 0x16 };
+    static const DWORD FSTR_BACK = 0x00448B3F;                 // push eax ; lea ecx,[esp+0C] ; ...
+
+    static bool applyFileStringClamp() {
+        if (memcmp((void*)FSTR_AT, FSTR_BYTES, sizeof(FSTR_BYTES)) != 0) return false;
+        BYTE* s = (BYTE*)VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!s) return false;
+        BYTE code[27] = {
+            0x8B, 0x44, 0x24, 0x04,                            // mov eax, [esp+4]      (length)
+            0x3D, 0xFF, 0x07, 0x00, 0x00,                      // cmp eax, 0x7FF
+            0x76, 0x09,                                        // jbe ok (unsigned: negatives are too large)
+            0xB8, 0xFF, 0x07, 0x00, 0x00,                      // mov eax, 0x7FF
+            0x89, 0x44, 0x24, 0x04,                            // mov [esp+4], eax      (used for buffer[len] = 0)
+            0x8B, 0x16,                                        // ok: mov edx, [esi]
+            0xE9, 0, 0, 0, 0,                                  // jmp FSTR_BACK
+        };
+        *(DWORD*)(code + 23) = FSTR_BACK - ((DWORD)s + 27);
+        memcpy(s, code, sizeof(code));
+        BYTE jmp[6] = { 0xE9, 0, 0, 0, 0, 0x90 };
+        *(DWORD*)(jmp + 1) = (DWORD)s - (FSTR_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)FSTR_AT, 6, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)FSTR_AT, jmp, 6);
+        VirtualProtect((void*)FSTR_AT, 6, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)FSTR_AT, 6);
+        return true;
+    }
+
+    // ---- game load (0x44A440, called by nGame::File::load): a damaged savegame/map makes the loader read
+    // garbage counts and throw a C++ exception ("vector<T> too long"), which nobody catches -> the game quits.
+    // The load runs inside an exception frame. The loader has already torn down the previous game state when it
+    // fails, so continuing would crash on the half-loaded state (tested): a clear message is shown and the game
+    // ends cleanly instead. Access violations are NOT caught.
+    static const DWORD LOAD_AT = 0x0044A440;                    // push -1 ; push 0x6264B8
+    static const BYTE LOAD_BYTES[] = { 0x6A, 0xFF, 0x68, 0xB8, 0x64, 0x62, 0x00 };
+    typedef char(__cdecl* Load_t)(DWORD, DWORD, char);
+    static Load_t g_loadOriginal = nullptr;
+    static volatile LONG g_loadAborted = 0;
+
+    static int loadFilter(DWORD code) { return code == 0xE06D7363 ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH; }
+
+    static char __cdecl safeLoad(DWORD type, DWORD path, char flag) {
+        __try {
+            return g_loadOriginal(type, path, flag);
+        } __except (loadFilter(GetExceptionCode())) {
+            InterlockedIncrement(&g_loadAborted);
+            HWND w = GetForegroundWindow();
+            ShowWindow(w, SW_MINIMIZE);   // fullscreen: let the message box be seen
+            MessageBoxA(nullptr,
+                "Der Spielstand bzw. die Karte ist beschaedigt und kann nicht geladen werden.\n"
+                "The savegame or map is damaged and cannot be loaded.\n\n"
+                "Das Spiel wird beendet. / The game will close.",
+                "Settlers II - Community Pack", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            ExitProcess(3);
+            return 0;
+        }
+    }
+
+    static bool applySafeLoad() {
+        if (memcmp((void*)LOAD_AT, LOAD_BYTES, sizeof(LOAD_BYTES)) != 0) return false;
+        BYTE* t = (BYTE*)VirtualAlloc(nullptr, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!t) return false;
+        memcpy(t, LOAD_BYTES, sizeof(LOAD_BYTES));
+        t[7] = 0xE9;
+        *(DWORD*)(t + 8) = (LOAD_AT + 7) - ((DWORD)t + 12);
+        g_loadOriginal = (Load_t)t;
+        BYTE jmp[7] = { 0xE9, 0, 0, 0, 0, 0x90, 0x90 };
+        *(DWORD*)(jmp + 1) = (DWORD)&safeLoad - (LOAD_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)LOAD_AT, 7, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)LOAD_AT, jmp, 7);
+        VirtualProtect((void*)LOAD_AT, 7, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)LOAD_AT, 7);
+        return true;
+    }
+
+    static bool applyStringClamp() {
+        if (memcmp((void*)STRREAD_THUNK, STRREAD_BYTES, sizeof(STRREAD_BYTES)) != 0) return false;
+        BYTE jmp[5] = { 0xE9 };
+        *(DWORD*)(jmp + 1) = (DWORD)stringReadHook - (STRREAD_THUNK + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)STRREAD_THUNK, 5, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)STRREAD_THUNK, jmp, 5);
+        VirtualProtect((void*)STRREAD_THUNK, 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)STRREAD_THUNK, 5);
+        return true;
+    }
 
     // ---- fixes that need a stub outside the exe (no padding space at the patch site) ----
     // game command 0x20022 (0x60F6F0): FUN_00451530(obj + 0x14C + index * 8) with an unchecked index (6 entries)
@@ -197,5 +334,11 @@ namespace BinaryFixes {
         }
         logf(applyCmd22() ? "applied: %s" : "skipped (code differs): %s",
             "game command 0x20022: slot index checked (0..5) before use (0x60F6F0)");
+        logf(applyStringClamp() ? "applied: %s" : "skipped (code differs): %s",
+            "stream string read: length limited to the remaining data (0x412D80/0x6D7E8C, savegames/maps/network)");
+        logf(applyFileStringClamp() ? "applied: %s" : "skipped (code differs): %s",
+            "file string read: length limited to the 2 KB stack buffer (0x448B10, savegame/map headers)");
+        logf(applySafeLoad() ? "applied: %s" : "skipped (code differs): %s",
+            "game load: a C++ exception from a damaged file aborts the load instead of quitting (0x44A440)");
     }
 }

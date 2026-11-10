@@ -12,6 +12,14 @@
 //     Out-of-range commands are ignored - identical on every PC running the fix.
 //  4. Commands that use a player (21 of 46 types) are skipped when their sender no longer resolves to a
 //     player (-1, e.g. a player left while commands were queued): the lookup 0x454200 has no range check.
+//  5. Memory stream read (0x412CD0, savegames, maps, network): pos+size was compared signed, so a damaged
+//     huge size passed the check -> huge copy. Now unsigned with overflow check.
+//  6. Memory stream string read (0x6D7E8C): the 16-bit length from the data was never checked against the
+//     remaining data (over-read; negative = ~4 GB). The length is clamped to the remaining bytes.
+//  7. File string read (0x448B10): length from the file read into a 2 KB stack buffer without a check ->
+//     stack buffer overflow with a damaged or crafted map/savegame. Clamped to 0..0x7FF.
+//  8. Game load (0x44A440): a C++ exception from a damaged file (e.g. 'vector<T> too long') quit the game.
+//     The load now runs in an exception frame and is aborted instead (access violations still crash).
 namespace BinaryFixes {
     void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace);   // trace: report commands to NetTrace
     void onDeviceCreated();   // exe unpacked: apply
