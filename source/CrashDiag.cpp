@@ -1,4 +1,5 @@
 #include "CrashDiag.h"
+#include "NetTrace.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -135,6 +136,7 @@ namespace CrashDiag {
         logf("    eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X esp=%08X",
             c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
         dumpStackWords(c);
+        NetTrace::dump("exception (see crashdiag.log)");
         writeDump(ep);
         return EXCEPTION_CONTINUE_SEARCH;
     }

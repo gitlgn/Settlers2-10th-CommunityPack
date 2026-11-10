@@ -16,6 +16,8 @@
 #include "GameGuard.h"
 #include "TimeFix.h"
 #include "SafeSave.h"
+#include "NetTrace.h"
+#include "BinaryFixes.h"
 #include "Lobby.h"
 #include "MainPatch.h"
 #include "ModSync.h"
@@ -33,6 +35,7 @@ float fFPSLimit;
 
 HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRect, HWND hDestWindowOverride, CONST RGNDATA *pDirtyRegion)
 {
+    NetTrace::onPresent();
 
     if (bFPSLimit)
     {
@@ -129,6 +132,8 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
         GameGuard::onDeviceCreated();
         TimeFix::onDeviceCreated();
         SafeSave::onDeviceCreated();
+        BinaryFixes::onDeviceCreated();
+        NetTrace::onDeviceCreated(hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
     }
 
     return hr;
@@ -315,6 +320,10 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             TimeFix::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\timefix.log", timeLog));
             char saveLog[MAX_PATH];
             SafeSave::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\safesave.log", saveLog));
+            char netLog[MAX_PATH];
+            NetTrace::init(settings->gameVersion == V_BASE_GOG, logPath("\\bin\\nettrace.log", netLog));
+            char fixLog[MAX_PATH];
+            BinaryFixes::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\gamefixes.log", fixLog));
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];
@@ -430,6 +439,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
     }
     case DLL_PROCESS_DETACH:
         CrashDiag::onProcessDetach(lpReserved);   // no-op unless installed (DebugMode)
+        NetTrace::dump("session end");
         if (lpReserved) GameGuard::onCleanExit();   // process exit (not FreeLibrary): session ended normally
         HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, bridgeProcessInfo.dwProcessId);
         if (hProcess != NULL) {

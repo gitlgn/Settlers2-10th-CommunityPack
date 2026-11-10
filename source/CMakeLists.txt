@@ -21,6 +21,8 @@ add_library(${PROJECT_NAME} SHARED
 	GameGuard.cpp
 	TimeFix.cpp
 	SafeSave.cpp
+	NetTrace.cpp
+	BinaryFixes.cpp
 	ModSync.cpp
 	UIScale.cpp
 	GfxPatches.cpp
