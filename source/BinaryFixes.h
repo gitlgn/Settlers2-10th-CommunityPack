@@ -19,7 +19,10 @@
 //  7. File string read (0x448B10): length from the file read into a 2 KB stack buffer without a check ->
 //     stack buffer overflow with a damaged or crafted map/savegame. Clamped to 0..0x7FF.
 //  8. Game load (0x44A440): a C++ exception from a damaged file (e.g. 'vector<T> too long') quit the game.
-//     The load now runs in an exception frame and is aborted instead (access violations still crash).
+//     The load now runs in an exception frame; a message explains the damaged file and the game ends cleanly.
+//  9. Multiplayer file transfer (own TFTP, message 300): the file name requested by another player was
+//     appended to the Documents folder unchecked -> '..\' / absolute paths let players read any file of the host.
+//     Names must stay below Documents (no '..', ':', leading separator); otherwise 'file not found'.
 namespace BinaryFixes {
     void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace);   // trace: report commands to NetTrace
     void onDeviceCreated();   // exe unpacked: apply

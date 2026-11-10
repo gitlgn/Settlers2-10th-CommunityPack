@@ -315,6 +315,84 @@ namespace BinaryFixes {
         return true;
     }
 
+    // ---- multiplayer file transfer (own TFTP, message type 300): a read request from another player carries a
+    // file name that is appended to the Documents folder (0x6E2868: Documents + "\" + name) and then opened and
+    // sent (0x42B390). The name was never checked -> "..\" or an absolute path let any player in the session
+    // read arbitrary files of the host. All transfer sessions start through the thunk 0x42B2B0 -> 0x6E1CE2
+    // (path = 3rd argument, std::string). The part after Documents\ must not contain "..", ':' or start with a
+    // separator; such a request gets an empty path (the game answers TFTP_ERROR_FILENOTFOUND).
+    static const DWORD TFTP_THUNK = 0x0042B2B0;
+    static const BYTE TFTP_BYTES[] = { 0xE9, 0x2D, 0x6A, 0x2B, 0x00 };   // jmp 0x6E1CE2
+    static const DWORD TFTP_REAL = 0x006E1CE2;
+    static std::string g_docs;                                         // "<documents>\" lower case
+    static volatile LONG g_tftpBlocked = 0;
+
+    struct GameString { DWORD alloc; union { char buf[16]; char* ptr; } u; DWORD size; DWORD cap; };
+    static char* gsData(GameString* s) { return s->cap >= 16 ? s->u.ptr : s->u.buf; }
+
+    static std::string documentsFolder() {
+        char raw[MAX_PATH] = "", path[MAX_PATH] = "";
+        DWORD size = sizeof(raw), type = 0;
+        HKEY k;
+        if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+                0, KEY_QUERY_VALUE, &k) == ERROR_SUCCESS) {
+            if (RegQueryValueExA(k, "Personal", nullptr, &type, (BYTE*)raw, &size) != ERROR_SUCCESS) raw[0] = 0;
+            RegCloseKey(k);
+        }
+        raw[sizeof(raw) - 1] = 0;
+        if (raw[0] && ExpandEnvironmentStringsA(raw, path, sizeof(path)) && path[0]) return path;
+        return std::string();
+    }
+
+    static void checkTransferPathInner(GameString* s) {
+        {
+            if (!s || g_docs.empty() || s->size == 0 || s->size > 4096) return;
+            char* d = gsData(s);
+            std::string p(d, s->size);
+            std::string low = p;
+            for (auto& c : low) { c = (char)tolower((unsigned char)c); if (c == '/') c = '\\'; }
+            if (low.compare(0, g_docs.size(), g_docs) != 0) return;     // local path of the game itself
+            std::string rest = low.substr(g_docs.size());
+            bool bad = rest.find("..") != std::string::npos || rest.find(':') != std::string::npos ||
+                       (!rest.empty() && rest[0] == '\\');
+            logf(bad ? "file transfer request BLOCKED: %s" : "file transfer request: %s", p.c_str());
+            if (bad) {
+                InterlockedIncrement(&g_tftpBlocked);
+                d[0] = 0;
+                s->size = 0;
+            }
+        }
+    }
+
+    static void __cdecl checkTransferPath(GameString* s) {
+        __try { checkTransferPathInner(s); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    static void __declspec(naked) tftpHook() {
+        __asm {
+            pushad
+            pushfd
+            push dword ptr [esp + 36 + 0x0C]   // 3rd argument: path
+            call checkTransferPath
+            add esp, 4
+            popfd
+            popad
+            push TFTP_REAL
+            ret
+        }
+    }
+
+    static bool applyTransferPathCheck() {
+        if (memcmp((void*)TFTP_THUNK, TFTP_BYTES, sizeof(TFTP_BYTES)) != 0) return false;
+        g_docs = documentsFolder();
+        if (g_docs.empty()) return false;
+        for (auto& c : g_docs) { c = (char)tolower((unsigned char)c); if (c == '/') c = '\\'; }
+        if (g_docs.back() != '\\') g_docs += '\\';
+        BYTE jmp[5] = { 0xE9 };
+        *(DWORD*)(jmp + 1) = (DWORD)tftpHook - (TFTP_THUNK + 5);
+        return write(TFTP_THUNK, jmp, 5);
+    }
+
     void onDeviceCreated() {
         if (!g_pending) return;
         g_pending = false;
@@ -340,5 +418,7 @@ namespace BinaryFixes {
             "file string read: length limited to the 2 KB stack buffer (0x448B10, savegame/map headers)");
         logf(applySafeLoad() ? "applied: %s" : "skipped (code differs): %s",
             "game load: a C++ exception from a damaged file aborts the load instead of quitting (0x44A440)");
+        logf(applyTransferPathCheck() ? "applied: %s" : "skipped (code differs): %s",
+            "multiplayer file transfer: requested names limited to the Documents folder (0x42B2B0)");
     }
 }
