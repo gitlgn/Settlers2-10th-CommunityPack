@@ -33,7 +33,51 @@ namespace BinaryFixes {
             },
             2
         },
+        {
+            "game command 0x2002F: index of the per-building value table checked (0..4) before writing (0x610390)",
+            {
+                // 00610402  int3 x12  ->  mov ecx,[esi+1C] ; mov [eax+edx*4+3C8],ecx ; jmp 0x6103F0
+                { "write stub", 0x00610402, { 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC }, { 0x8B, 0x4E, 0x1C, 0x89, 0x8C, 0x90, 0xC8, 0x03 }, 8 },
+                { "write stub 2", 0x0061040A, { 0xCC, 0xCC, 0xCC, 0xCC }, { 0x00, 0x00, 0xEB, 0xE2 }, 4 },
+                // 006103E3  mov edx,[esi+18] ; mov ecx,[esi+1C] ; mov [eax+edx*4+3C8],ecx
+                //       ->  mov edx,[esi+18] ; cmp edx,4 ; ja 0x6103F0 (skip) ; jmp 0x610402 (write stub)
+                { "check", 0x006103E3, { 0x8B, 0x56, 0x18, 0x8B, 0x4E, 0x1C, 0x89, 0x8C }, { 0x8B, 0x56, 0x18, 0x83, 0xFA, 0x04, 0x77, 0x05 }, 8 },
+                { "check 2", 0x006103EB, { 0x90, 0xC8, 0x03, 0x00, 0x00 }, { 0xEB, 0x15, 0xCC, 0xCC, 0xCC }, 5 },
+            },
+            4
+        },
     };
+
+    // ---- fixes that need a stub outside the exe (no padding space at the patch site) ----
+    // game command 0x20022 (0x60F6F0): FUN_00451530(obj + 0x14C + index * 8) with an unchecked index (6 entries)
+    static const DWORD CMD22_AT = 0x0060F767;                 // lea edx,[ecx+esi*8+14C] (7 bytes)
+    static const BYTE CMD22_BYTES[] = { 0x8D, 0x94, 0xF1, 0x4C, 0x01, 0x00, 0x00 };
+    static const DWORD CMD22_CONTINUE = 0x0060F76E;           // push edx ; add ecx,118 ; call
+    static const DWORD CMD22_SKIP = 0x0060F77A;               // after the call
+
+    static bool applyCmd22() {
+        if (memcmp((void*)CMD22_AT, CMD22_BYTES, sizeof(CMD22_BYTES)) != 0) return false;
+        BYTE* s = (BYTE*)VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!s) return false;
+        BYTE code[22] = {
+            0x83, 0xFE, 0x05,                                  // cmp esi, 5
+            0x77, 0x0C,                                        // ja skip
+            0x8D, 0x94, 0xF1, 0x4C, 0x01, 0x00, 0x00,          // lea edx, [ecx+esi*8+14C]
+            0xE9, 0, 0, 0, 0,                                  // jmp CMD22_CONTINUE
+            0xE9, 0, 0, 0, 0,                                  // skip: jmp CMD22_SKIP
+        };
+        *(DWORD*)(code + 13) = CMD22_CONTINUE - ((DWORD)s + 17);
+        *(DWORD*)(code + 18) = CMD22_SKIP - ((DWORD)s + 22);
+        memcpy(s, code, sizeof(code));
+        BYTE jmp[7] = { 0xE9, 0, 0, 0, 0, 0x90, 0x90 };
+        *(DWORD*)(jmp + 1) = (DWORD)s - (CMD22_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)CMD22_AT, 7, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)CMD22_AT, jmp, 7);
+        VirtualProtect((void*)CMD22_AT, 7, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)CMD22_AT, 7);
+        return true;
+    }
 
     static bool g_pending = false;
     static std::string g_log;
@@ -74,5 +118,7 @@ namespace BinaryFixes {
             for (int i = 0; i < fx.count; i++) ok = write(fx.parts[i].addr, fx.parts[i].after, fx.parts[i].len) && ok;
             logf(ok ? "applied: %s" : "FAILED: %s", fx.name);
         }
+        logf(applyCmd22() ? "applied: %s" : "skipped (code differs): %s",
+            "game command 0x20022: slot index checked (0..5) before use (0x60F6F0)");
     }
 }
