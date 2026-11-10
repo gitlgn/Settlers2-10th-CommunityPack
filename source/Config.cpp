@@ -8,6 +8,7 @@
 
 #include <Helper.h>
 #include "Config.h"
+#include "GameGuard.h"
 
 #include <bcrypt.h>
 #include <cstdint>
@@ -76,7 +77,7 @@ void GameSettings::writeEngineConfig(char* path) {
 
     ini.SetLongValue("Engine", "hardwareCursor", (long)bHardwareCursor);
     ini.SetLongValue("Engine", "refreshRate", 0); // this setting causes more problems than it solves
-    ini.SetLongValue("Engine", "useMeshCache", 1);
+    ini.SetLongValue("Engine", "useMeshCache", GameGuard::meshCacheAllowed() ? 1 : 0);   // community pack: [Misc] MeshCache, unwritable cache folder
 
     if (bVulkan)
         ini.SetLongValue("Engine", "vsync", 0);

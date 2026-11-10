@@ -20,6 +20,8 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: game code runs with its memory above 2 GB – only the game's shader compiler d3dx9_29 cannot, see notes) | on |
+| 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
+| 🧹 | **Mesh cache guard** – clears the mesh/shader cache after a crash and disables it if its folder is not writable (known cause of crashes a few minutes into a map); `[Misc] MeshCache` | on |
 | 🛠️ | **Crash diagnostics** – minidump + log on crashes (`DebugMode`) | off |
 
 Every item can be switched individually in `bin\d3d9.ini` (`[Mods]`, `[UI]`, `[Graphics]`);
@@ -79,6 +81,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/UIScale.*`, `uiscale_vs.hlsl` | HUD scaling (virtual HUD size, vertex shader for pre-transformed vertices), HD interface texture handling |
 | `source/GfxPatches.*` | shadow map / reflection render target size patches |
 | `source/ModSync.*` | switchable data packs under `<game>\mods` with automatic backup/restore |
+| `source/GameGuard.*` | profile backup/restore (`Documents\S2\users\backup`), mesh/shader cache guard (`%LOCALAPPDATA%\S2`) |
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
 | `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |

@@ -18,6 +18,7 @@ add_library(${PROJECT_NAME} SHARED
 	MainPatchASM.cpp
 	CrashDiag.cpp
 	LAAStress.cpp
+	GameGuard.cpp
 	ModSync.cpp
 	UIScale.cpp
 	GfxPatches.cpp

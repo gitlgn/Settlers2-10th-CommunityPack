@@ -13,6 +13,7 @@
 #include "Config.h"
 #include "CrashDiag.h"
 #include "LAAStress.h"
+#include "GameGuard.h"
 #include "Lobby.h"
 #include "MainPatch.h"
 #include "ModSync.h"
@@ -309,6 +310,8 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];
             getGameDirectory(baseModule, gameRoot, MAX_PATH, "", 1);
+            // profile backup/restore and mesh cache guard (before the game reads its profile or cache)
+            GameGuard::startup(gameRoot, configPath, debug);
             ModSync::apply(gameRoot, configPath, logPath("\\bin\\modsync.log", modLog));
         }
         Logging::Logger logger("DX9", logFile, gameSettings->bDebugWindow);
@@ -413,6 +416,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
     }
     case DLL_PROCESS_DETACH:
         CrashDiag::onProcessDetach(lpReserved);   // no-op unless installed (DebugMode)
+        if (lpReserved) GameGuard::onCleanExit();   // process exit (not FreeLibrary): session ended normally
         HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, bridgeProcessInfo.dwProcessId);
         if (hProcess != NULL) {
             TerminateProcess(hProcess, 0);
