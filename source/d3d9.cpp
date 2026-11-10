@@ -323,7 +323,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             char netLog[MAX_PATH];
             NetTrace::init(settings->gameVersion == V_BASE_GOG, logPath("\\bin\\nettrace.log", netLog));
             char fixLog[MAX_PATH];
-            BinaryFixes::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\gamefixes.log", fixLog));
+            BinaryFixes::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\gamefixes.log", fixLog), debug);
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];

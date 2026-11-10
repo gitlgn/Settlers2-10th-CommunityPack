@@ -10,7 +10,9 @@
 //     unchecked index (table of 5) -> memory outside the object could be overwritten. Now 0..4 only.
 //  3. Game command 0x20022 (0x60F6F0) used obj+0x14C+index*8 with an unchecked index (6 entries).
 //     Out-of-range commands are ignored - identical on every PC running the fix.
+//  4. Commands that use a player (21 of 46 types) are skipped when their sender no longer resolves to a
+//     player (-1, e.g. a player left while commands were queued): the lookup 0x454200 has no range check.
 namespace BinaryFixes {
-    void init(const char* iniPath, bool supportedExe, const char* logPath);
+    void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace);   // trace: report commands to NetTrace
     void onDeviceCreated();   // exe unpacked: apply
 }

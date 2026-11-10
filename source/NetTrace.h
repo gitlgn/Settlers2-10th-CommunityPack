@@ -11,4 +11,6 @@ namespace NetTrace {
     void onDeviceCreated(HWND window);
     void onPresent();                     // samples mouse buttons once per frame
     void dump(const char* reason);        // crash handler / process exit
+    // from the game command dispatcher hook (BinaryFixes); player = INT_MIN when the command uses none
+    void onCommand(DWORD type, const BYTE* cmd, int player, bool skipped);
 }

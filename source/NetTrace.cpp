@@ -1,5 +1,6 @@
 #include "NetTrace.h"
 
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -13,11 +14,7 @@ namespace NetTrace {
 
     enum Kind : BYTE { K_NET = 1, K_CLICK = 2, K_CMD = 3 };
 
-    // game command dispatcher nGame::System (0x611620): after "call [eax+4]" (command type in eax, command in esi)
-    static const DWORD CMD_ADDR = 0x00611634;
-    static const BYTE CMD_BYTES[] = { 0x05, 0xFE, 0xFF, 0xFD, 0xFF };   // add eax, 0xFFFDFFFE
-    static const DWORD CMD_BACK = 0x00611639;
-    static bool g_cmdHooked = false;
+    static volatile LONG g_cmdSeen = 0;   // commands reported by the dispatcher hook (BinaryFixes)
     struct Event {
         DWORD ms;
         BYTE kind;
@@ -71,11 +68,16 @@ namespace NetTrace {
         LeaveCriticalSection(&g_cs);
     }
 
-    // command: type, sender slot (+0x0C) and the first three parameters (+0x10, +0x14, +0x18)
-    static void __cdecl onCommand(DWORD type, const BYTE* cmd) {
+    // command from the dispatcher hook in BinaryFixes: type, sender slot (+0x0C), resolved player (or INT_MIN
+    // when the command does not use one), whether it was skipped, and the first three parameters
+    void onCommand(DWORD type, const BYTE* cmd, int player, bool skipped) {
+        if (!g_enabled) return;
+        InterlockedIncrement(&g_cmdSeen);
         Event& e = slot();
         e.kind = K_CMD;
         e.type = (WORD)(type - 0x20000);
+        e.channel = (WORD)(short)(player == INT_MIN ? 0x7FFF : player);
+        e.button = skipped ? 1 : 0;
         __try {
             e.size = *(const int*)(cmd + 0x0C);   // sender slot
             e.conn = *(const DWORD*)(cmd + 0x10);
@@ -85,26 +87,10 @@ namespace NetTrace {
         EnterCriticalSection(&g_cs);
         Stat& s = g_stats[0xFFFF0000u | e.type];
         s.count++;
-        if (e.size < 0) s.bytes++;   // commands with a negative sender slot
+        if (skipped) s.bytes++;                   // commands skipped because of an invalid player
+        if (player != INT_MIN && player < 0) s.maxSize = player;
         LeaveCriticalSection(&g_cs);
     }
-
-    static void __declspec(naked) cmdHook() {
-        __asm {
-            pushad
-            pushfd
-            push esi
-            push eax
-            call onCommand
-            add esp, 8
-            popfd
-            popad
-            add eax, 0xFFFDFFFE
-            push CMD_BACK
-            ret
-        }
-    }
-
     static void __declspec(naked) recvHook() {
         __asm {
             pushad
@@ -152,15 +138,6 @@ namespace NetTrace {
         FlushInstructionCache(GetCurrentProcess(), (void*)RECV_ADDR, 7);
         g_hooked = true;
 
-        if (memcmp((void*)CMD_ADDR, CMD_BYTES, sizeof(CMD_BYTES)) == 0 &&
-            VirtualProtect((void*)CMD_ADDR, 5, PAGE_EXECUTE_READWRITE, &old)) {
-            BYTE* q = (BYTE*)CMD_ADDR;
-            q[0] = 0xE9;
-            *(DWORD*)(q + 1) = (DWORD)cmdHook - (CMD_ADDR + 5);
-            VirtualProtect((void*)CMD_ADDR, 5, old, &old);
-            FlushInstructionCache(GetCurrentProcess(), (void*)CMD_ADDR, 5);
-            g_cmdHooked = true;
-        }
     }
 
     void onPresent() {
@@ -190,9 +167,9 @@ namespace NetTrace {
         RECT rc = {};
         if (g_window) GetClientRect(g_window, &rc);
         fprintf(f, "nettrace: %s  (receive hook %s, command hook %s, window %ldx%ld, %ld events)\n\n", reason,
-            g_hooked ? "active" : "NOT active", g_cmdHooked ? "active" : "NOT active", rc.right, rc.bottom, g_next);
+            g_hooked ? "active" : "NOT active", g_cmdSeen ? "active" : "no commands seen", rc.right, rc.bottom, g_next);
 
-        fprintf(f, "statistics: network channel/type: count, bytes, max size | commands 65535/(type-0x20000): count, negative sender slots\n");
+        fprintf(f, "statistics: network channel/type: count, bytes, max size | commands 65535/(type-0x20000): count, skipped (invalid player), lowest negative player\n");
         if (TryEnterCriticalSection(&g_cs)) {   // never block inside a crash handler
             for (auto& s : g_stats)
                 fprintf(f, "  %5u/%-5u %8u %12llu %8d\n", s.first >> 16, s.first & 0xFFFF, s.second.count, s.second.bytes, s.second.maxSize);
@@ -206,8 +183,10 @@ namespace NetTrace {
             if (e.kind == K_CLICK) {
                 fprintf(f, "%9lu  click   button %u at %ld,%ld\n", e.ms, e.button, (long)e.conn, (long)e.user);
             } else if (e.kind == K_CMD) {
-                fprintf(f, "%9lu  command 0x%05X  slot %d  args %08lX %08lX %02X%02X%02X%02X\n", e.ms, 0x20000 + e.type, e.size,
-                    e.conn, e.user, e.head[3], e.head[2], e.head[1], e.head[0]);
+                char pl[16];
+                if (e.channel == 0x7FFF) strcpy_s(pl, "-"); else sprintf_s(pl, "%d", (int)(short)e.channel);
+                fprintf(f, "%9lu  command 0x%05X  slot %d  player %s%s  args %08lX %08lX %02X%02X%02X%02X\n", e.ms, 0x20000 + e.type, e.size,
+                    pl, e.button ? "  SKIPPED" : "", e.conn, e.user, e.head[3], e.head[2], e.head[1], e.head[0]);
             } else if (e.kind == K_NET) {
                 char hex[64] = "";
                 int m = e.size < 16 ? (e.size > 0 ? e.size : 0) : 16;
