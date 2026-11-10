@@ -9,7 +9,6 @@ namespace CrashDiag {
     static char g_logPath[MAX_PATH];
     static char g_dumpPath[MAX_PATH];
     static HMODULE g_exe = nullptr;
-    static volatile LONG g_dumped = 0;
     static volatile LONG g_count = 0;
 
     typedef BOOL(WINAPI* MiniDumpWriteDump_t)(HANDLE, DWORD, HANDLE, int, void*, void*, void*);
@@ -69,19 +68,35 @@ namespace CrashDiag {
         return false;
     }
 
+    // The vectored handler sees first-chance exceptions, including harmless ones the game or a driver
+    // handles itself. So one dump is written per distinct exception address, in DUMP_SLOTS rotating files
+    // (crashdiag_1.dmp ...): the newest dump is the one closest to the real crash.
+    static const int DUMP_SLOTS = 4;
+    static void* g_dumpAddr[64];
+    static volatile LONG g_dumpCount = 0;
+
     static void writeDump(EXCEPTION_POINTERS* ep) {
-        if (InterlockedCompareExchange(&g_dumped, 1, 0) != 0) return;
+        void* addr = ep->ExceptionRecord->ExceptionAddress;
+        LONG n = g_dumpCount;
+        for (LONG i = 0; i < n && i < 64; i++) if (g_dumpAddr[i] == addr) return;   // already dumped
+        LONG idx = InterlockedIncrement(&g_dumpCount) - 1;
+        if (idx >= 64) return;
+        g_dumpAddr[idx] = addr;
         HMODULE dbg = LoadLibraryA("dbghelp.dll");
         if (!dbg) return;
         auto fn = (MiniDumpWriteDump_t)GetProcAddress(dbg, "MiniDumpWriteDump");
         if (!fn) return;
-        HANDLE f = CreateFileA(g_dumpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        char path[MAX_PATH];
+        strncpy_s(path, g_dumpPath, _TRUNCATE);
+        char* dot = strrchr(path, '.');
+        if (dot) _snprintf_s(dot, path + MAX_PATH - dot, _TRUNCATE, "_%d.dmp", (int)(idx % DUMP_SLOTS) + 1);
+        HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (f == INVALID_HANDLE_VALUE) return;
         struct { DWORD tid; EXCEPTION_POINTERS* ep; BOOL cl; } info = { GetCurrentThreadId(), ep, FALSE };
         // MiniDumpWithIndirectlyReferencedMemory(0x40) | WithDataSegs(0x1) | WithThreadInfo(0x1000)
         fn(GetCurrentProcess(), GetCurrentProcessId(), f, 0x1 | 0x40 | 0x1000, &info, nullptr, nullptr);
         CloseHandle(f);
-        logf("minidump written: %s", g_dumpPath);
+        logf("minidump #%ld written: %s", idx + 1, path);
     }
 
     static void dumpStackWords(CONTEXT* c) {
@@ -132,6 +147,13 @@ namespace CrashDiag {
         g_exe = GetModuleHandleA(nullptr);
 
         DeleteFileA(g_logPath);
+        DeleteFileA(g_dumpPath);   // single dump of older versions
+        for (int i = 1; i <= DUMP_SLOTS; i++) {
+            char p[MAX_PATH];
+            strncpy_s(p, g_dumpPath, _TRUNCATE);
+            char* d = strrchr(p, '.');
+            if (d) { _snprintf_s(d, p + MAX_PATH - d, _TRUNCATE, "_%d.dmp", i); DeleteFileA(p); }
+        }
         logf("crashdiag installed (exe base %p)", g_exe);
         AddVectoredExceptionHandler(1, vectoredHandler);
     }

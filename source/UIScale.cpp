@@ -159,8 +159,8 @@ namespace UIScale {
         auto it = g_hdOrig.find(file);
         if (it == g_hdOrig.end()) return;
         if (w == it->second.first && h == it->second.second) return;
+        // no extra reference: every texture is created through this hook, which drops a reused address first
         g_hdTex[tex] = { (float)w / it->second.first, (float)h / it->second.second };
-        ((IUnknown*)tex)->AddRef();   // keep it alive so the address can never be reused by another texture
         logf("upscaled HUD texture %s: %ux%u (original %ux%u)", it->first.c_str(), w, h, it->second.first, it->second.second);
     }
 
@@ -170,6 +170,25 @@ namespace UIScale {
     static UINT g_vbOffset = 0, g_vbStride = 0;
     void trackStream(UINT n, IDirect3DVertexBuffer9* vb, UINT offset, UINT stride) {
         if (n == 0) { g_vb = vb; g_vbOffset = offset; g_vbStride = stride; }
+    }
+
+    // write-only vertex buffers must not be read back (undefined content, forces a GPU sync)
+    static std::map<void*, bool> g_vbWriteOnly;
+    void onCreateVertexBuffer(IDirect3DVertexBuffer9* vb, DWORD usage) {
+        if (vb) g_vbWriteOnly[vb] = (usage & D3DUSAGE_WRITEONLY) != 0;
+    }
+
+    void onCreateObject(void* obj) {
+        g_hdTex.erase(obj);
+        g_vbWriteOnly.erase(obj);
+    }
+
+    void disableHDInterface(const char* reason) {
+        if (g_hdOrig.empty()) return;
+        g_hdOrig.clear();
+        g_hdTex.clear();
+        logf("HD interface off: %s", reason);
+        if (!g_scaleOn) g_pending = false;
     }
 
     UINT vertexCount(D3DPRIMITIVETYPE type, UINT n) {
@@ -196,6 +215,8 @@ namespace UIScale {
             p = (const BYTE*)r.upData + r.first * r.upStride;
             stride = r.upStride;
         } else if (g_vb && g_vbStride >= 16) {
+            // The game's HUD buffers are WRITEONLY, but their content is needed (texture-coordinate range of
+            // upscaled textures, frame detection). DXVK keeps a readable copy; skipping them broke the menu.
             void* data = nullptr;
             stride = g_vbStride;
             if (SUCCEEDED(g_vb->Lock(g_vbOffset + r.first * stride, count * stride, &data, D3DLOCK_READONLY | D3DLOCK_NOSYSLOCK)) && data) {
@@ -254,24 +275,36 @@ namespace UIScale {
     static const BYTE  PROJECT_BYTES[] = { 0x56, 0x57, 0x8B, 0x7C, 0x24, 0x0C, 0x8B, 0xF1 };
     static BYTE* g_projectTramp = nullptr;   // original first 6 bytes + jmp back
 
-    static void __cdecl projectToVirtual(float* out) {
-        LONG vw = g_virtW, vh = g_virtH;
-        if (!vw || !vh) return;
-        out[0] *= (float)vw / (float)g_realW;
-        out[1] *= (float)vh / (float)g_realH;
+    // cam = the camera object (this); its D3DVIEWPORT9 is at +0xD8 (Width +0xE0, Height +0xE4)
+    static void __cdecl projectToVirtual(float* out, const BYTE* cam) {
+        LONG vw = g_virtW, vh = g_virtH, rw = g_realW, rh = g_realH;
+        if (!vw || !vh || !cam) return;
+        // only projections onto the screen; other viewports (render targets) keep their own pixels
+        DWORD w = *(const DWORD*)(cam + 0xE0), h = *(const DWORD*)(cam + 0xE4);
+        if ((LONG)w != rw || (LONG)h != rh) {
+            static LONG logged = 0;
+            if (InterlockedExchange(&logged, 1) == 0) logf("projection with viewport %lux%lu (screen %ldx%ld) left unscaled", w, h, rw, rh);
+            return;
+        }
+        out[0] *= (float)vw / (float)rw;
+        out[1] *= (float)vh / (float)rh;
     }
 
     static void __declspec(naked) projectHook() {
         __asm {
-            push dword ptr [esp + 8]      // in
-            push dword ptr [esp + 8]      // out
-            call g_projectTramp           // original (ecx = this), ret 8
+            push ecx                      // this
+            push dword ptr [esp + 12]     // in
+            push dword ptr [esp + 12]     // out
+            mov ecx, [esp + 8]            // this for the original
+            call g_projectTramp           // original, ret 8
+            pop ecx                       // this
             test al, al
             jz done
             push eax
-            push dword ptr [esp + 8]      // out
+            push ecx                      // cam
+            push dword ptr [esp + 12]     // out
             call projectToVirtual
-            add esp, 4
+            add esp, 8
             pop eax
         done:
             ret 8
@@ -389,9 +422,15 @@ namespace UIScale {
         UINT n = MAXD3DDECLLENGTH + 1;
         Repl r = { nullptr, V_NONE };
         if (SUCCEEDED(decl->GetDeclaration(el, &n))) r = makeRepl(dev, el, n, "declaration");
-        decl->AddRef();   // cached by address: keep it alive so the address cannot be reused
-        g_declRepl[decl] = r;
+        g_declRepl[decl] = r;   // cached by address; onCreateDecl drops the entry when the address is reused
         return r;
+    }
+
+    void onCreateDecl(IDirect3DVertexDeclaration9* decl) {
+        auto it = g_declRepl.find(decl);
+        if (it == g_declRepl.end()) return;
+        if (it->second.decl) it->second.decl->Release();
+        g_declRepl.erase(it);
     }
 
     static Repl replacementForFVF(IDirect3DDevice9* dev, DWORD fvf) {

@@ -89,14 +89,39 @@ if (($exe[$o] -band 0x20) -eq 0) {
     Say "S2DNG.exe: 4 GB memory already enabled" Green
 }
 
-$ini = Get-Content "$Bin\d3d9.ini" -Raw
+# merge the template: missing sections are appended, missing keys (with their comment lines) are added
+# to the end of an existing section - values the player already set are never touched
+$lines = [System.Collections.Generic.List[string]]((Get-Content "$Bin\d3d9.ini") -as [string[]])
 $template = Get-Content (Join-Path $PackDir "d3d9.ini.sections") -Raw
+$added = 0
 foreach ($section in ($template -split '(?m)^(?=\[)') | Where-Object { $_.Trim() }) {
-    $name = ($section -split "`n")[0].Trim()
-    if ($ini -notmatch [regex]::Escape($name)) { $ini = $ini.TrimEnd() + "`r`n`r`n" + $section.Trim() + "`r`n" }
+    $tl = $section.Trim() -split "\r?\n"
+    $name = $tl[0].Trim()
+    $start = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -ieq $name) { $start = $i; break } }
+    if ($start -lt 0) {
+        $lines.Add(""); foreach ($l in $tl) { $lines.Add($l) }; $added++
+        continue
+    }
+    $end = $lines.Count
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i].TrimStart().StartsWith("[")) { $end = $i; break } }
+    $present = @{}
+    for ($i = $start + 1; $i -lt $end; $i++) { if ($lines[$i] -match '^\s*([^;=\s][^=]*?)\s*=') { $present[$Matches[1].ToLower()] = $true } }
+    $comments = @()
+    foreach ($l in $tl[1..($tl.Count - 1)]) {
+        if ($l -match '^\s*;') { $comments += $l; continue }
+        if ($l -match '^\s*([^;=\s][^=]*?)\s*=') {
+            if (-not $present.ContainsKey($Matches[1].ToLower())) {
+                while ($end -gt $start + 1 -and -not $lines[$end - 1].Trim()) { $end-- }   # before trailing blank lines
+                foreach ($x in $comments + $l) { $lines.Insert($end, $x); $end++ }
+                $added++
+            }
+        }
+        $comments = @()
+    }
 }
-Set-Content "$Bin\d3d9.ini" $ini -NoNewline
-Say "d3d9.ini: [Mods], [UI] and [Graphics] sections present" Green
+Set-Content "$Bin\d3d9.ini" $lines
+Say "d3d9.ini: [Mods], [UI], [Graphics] and [Misc] settings present ($added added)" Green
 
 # ------------------------------------------------------------------ helpers
 $Work = Join-Path $Mods "_build"

@@ -4,5 +4,6 @@
 // Packs are switched on/off through the [Mods] section of d3d9.ini; the originals
 // are backed up to <game>\mods\_backup\<name>\ and restored when a pack is switched off.
 namespace ModSync {
-    void apply(const char* gameDir, const char* iniPath, const char* logPath);
+    // allowed = false: the game cannot load the unencrypted pack files (file-load hook missing) -> all packs off
+    void apply(const char* gameDir, const char* iniPath, const char* logPath, bool allowed = true);
 }

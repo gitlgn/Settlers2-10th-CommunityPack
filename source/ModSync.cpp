@@ -193,7 +193,7 @@ namespace ModSync {
         writeAll(stateFile, state);
         logf("[%s] enabled, %u failed", name.c_str(), failed);
     }
-    void apply(const char* gameDir, const char* iniPath, const char* logPath) {
+    void apply(const char* gameDir, const char* iniPath, const char* logPath, bool allowed) {
         g_log = logPath ? logPath : "";   // nullptr = no log file
         std::string game = gameDir;
         while (!game.empty() && game.back() == '\\') game.pop_back();
@@ -206,11 +206,12 @@ namespace ModSync {
             { "smooth_shadows", "SmoothShadows", true },
             { "postfx",        "ImprovedPostFX", true },
         };
-        DWORD t0 = GetTickCount();
+        if (!allowed) logf("packs switched off: [Misc] FileLoadPatch is off or the game version is not supported (unencrypted pack files would not load)");
+        ULONGLONG t0 = GetTickCount64();
         for (auto& m : mods) {
-            applyMod(game, m.name, iniOn(iniPath, m.key, m.def));
+            applyMod(game, m.name, allowed && iniOn(iniPath, m.key, m.def));
         }
-        DWORD dt = GetTickCount() - t0;
-        if (dt > 500) logf("mod sync took %lu ms", dt);
+        ULONGLONG dt = GetTickCount64() - t0;
+        if (dt > 500) logf("mod sync took %llu ms", dt);
     }
 }

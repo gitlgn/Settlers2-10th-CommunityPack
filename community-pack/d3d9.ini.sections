@@ -32,3 +32,7 @@ SSAO = on
 ; SSAO darkness 0.0 - 1.0 and radius 0.25 - 4.0
 SSAOStrength = 0.6
 SSAORadius = 1.0
+
+[Misc]
+; community pack: mesh cache (faster loading). Cleared automatically after a crash, switched off if its folder is not writable
+MeshCache = on

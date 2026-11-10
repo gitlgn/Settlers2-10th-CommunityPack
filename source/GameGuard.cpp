@@ -1,12 +1,10 @@
 #include "GameGuard.h"
 
 #include <windows.h>
-#include <shlobj.h>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
 #include <vector>
-#pragma comment(lib, "shell32.lib")
 
 namespace GameGuard {
 
@@ -14,16 +12,23 @@ namespace GameGuard {
     static bool g_debug = false, g_cacheAllowed = true;
     static std::vector<std::string> g_pending;   // messages until we know whether to write a log
 
-    static void logf(const char* fmt, ...) {
+    static bool g_repaired = false;   // something was actually repaired: the log is written without DebugMode
+
+    static void vlog(const char* fmt, va_list ap) {
         char buf[1024];
-        va_list ap;
-        va_start(ap, fmt);
         vsnprintf(buf, sizeof(buf), fmt, ap);
-        va_end(ap);
         g_pending.push_back(buf);
     }
+    // information (written with DebugMode only)
+    static void logf(const char* fmt, ...) { va_list ap; va_start(ap, fmt); vlog(fmt, ap); va_end(ap); }
+    // a repair or a problem the player should be able to find later
+    static void repair(const char* fmt, ...) { va_list ap; va_start(ap, fmt); vlog(fmt, ap); va_end(ap); g_repaired = true; }
+
     static void flushLog(bool force) {
         if (g_pending.empty() || (!force && !g_debug)) return;
+        WIN32_FILE_ATTRIBUTE_DATA a;   // keep the log small: start over above 64 KB
+        if (GetFileAttributesExA(g_logPath.c_str(), GetFileExInfoStandard, &a) && a.nFileSizeLow > 64 * 1024)
+            DeleteFileA(g_logPath.c_str());
         FILE* f = nullptr;
         if (fopen_s(&f, g_logPath.c_str(), "a") != 0 || !f) return;
         SYSTEMTIME t;
@@ -72,8 +77,10 @@ namespace GameGuard {
         if (memcmp(&d[4], SIG, 4) != 0) return false;
         DWORD len = *(const DWORD*)&d[12];
         if (len > 64 || 16 + len > d.size()) return false;
-        if (len != stem.size()) return false;
-        return _strnicmp((const char*)&d[16], stem.c_str(), len) == 0;
+        // the stored name need not equal the file name; it only has to look like a name
+        for (DWORD i = 0; i < len; i++) if (d[16 + i] < 0x20) return false;
+        (void)stem;
+        return true;
     }
 
     static void guardProfiles(const std::string& usersDir) {
@@ -100,7 +107,7 @@ namespace GameGuard {
             // damaged: restore the newest valid backup, keep the damaged file for inspection
             const std::string* src = validProfile(bak, stem) ? &bak : validProfile(old, stem) ? &old : nullptr;
             if (!src) {
-                logf("profile %s is damaged and there is no valid backup - left unchanged", name.c_str());
+                repair("profile %s is damaged and there is no valid backup - left unchanged", name.c_str());
                 continue;
             }
             SYSTEMTIME t;
@@ -111,9 +118,9 @@ namespace GameGuard {
             CreateDirectoryA(backupDir.c_str(), nullptr);
             MoveFileExA(file.c_str(), damaged.c_str(), MOVEFILE_REPLACE_EXISTING);
             if (CopyFileA(src->c_str(), file.c_str(), FALSE))
-                logf("profile %s was damaged - restored from %s (damaged copy: %s)", name.c_str(), src->c_str(), damaged.c_str());
+                repair("profile %s was damaged - restored from %s (damaged copy: %s)", name.c_str(), src->c_str(), damaged.c_str());
             else
-                logf("profile %s was damaged - restoring %s FAILED (error %lu)", name.c_str(), src->c_str(), GetLastError());
+                repair("profile %s was damaged - restoring %s FAILED (error %lu)", name.c_str(), src->c_str(), GetLastError());
         } while (FindNextFileA(h, &fd));
         FindClose(h);
     }
@@ -154,7 +161,7 @@ namespace GameGuard {
 
         if (abnormal && exists(cacheDir)) {
             int n = clearCache(cacheDir);
-            logf("previous session ended abnormally - mesh/shader cache cleared (%d files), it is rebuilt on this start", n);
+            repair("previous session ended abnormally - mesh/shader cache cleared (%d files), it is rebuilt on this start", n);
         }
 
         // session markers
@@ -171,13 +178,37 @@ namespace GameGuard {
             HANDLE h = CreateFileA(probe.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_FLAG_DELETE_ON_CLOSE, nullptr);
             if (h == INVALID_HANDLE_VALUE) {
                 g_cacheAllowed = false;
-                logf("mesh cache folder %s is not writable (error %lu) - mesh cache disabled for this session", cacheDir.c_str(), GetLastError());
+                repair("mesh cache folder %s is not writable (error %lu) - mesh cache disabled for this session", cacheDir.c_str(), GetLastError());
             } else {
                 CloseHandle(h);
             }
         } else {
             logf("mesh cache disabled ([Misc] MeshCache = off)");
         }
+    }
+
+    // ---------------- folders ----------------
+
+    static std::string envVar(const char* name) {
+        char buf[MAX_PATH];
+        DWORD n = GetEnvironmentVariableA(name, buf, sizeof(buf));
+        return n && n < sizeof(buf) ? std::string(buf) : std::string();
+    }
+
+    // HKCU\...\User Shell Folders\Personal (REG_EXPAND_SZ, follows redirected / OneDrive folders)
+    static std::string documentsFolder() {
+        char raw[MAX_PATH] = "", path[MAX_PATH] = "";
+        DWORD size = sizeof(raw), type = 0;
+        HKEY k;
+        if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+                0, KEY_QUERY_VALUE, &k) == ERROR_SUCCESS) {
+            if (RegQueryValueExA(k, "Personal", nullptr, &type, (BYTE*)raw, &size) != ERROR_SUCCESS) raw[0] = 0;
+            RegCloseKey(k);
+        }
+        raw[sizeof(raw) - 1] = 0;
+        if (raw[0] && ExpandEnvironmentStringsA(raw, path, sizeof(path)) && path[0]) return path;
+        std::string home = envVar("USERPROFILE");
+        return home.empty() ? home : home + "\\Documents";
     }
 
     // ---------------- interface ----------------
@@ -187,21 +218,24 @@ namespace GameGuard {
         g_logPath = std::string(gameRoot) + "\\bin\\gameguard.log";
         if (debug) DeleteFileA(g_logPath.c_str());
 
-        char docs[MAX_PATH] = "", local[MAX_PATH] = "";
-        SHGetFolderPathA(nullptr, CSIDL_PERSONAL, nullptr, SHGFP_TYPE_CURRENT, docs);
-        SHGetFolderPathA(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, local);
+        // runs inside DllMain (loader lock): no shell API (SHGetFolderPath may go through COM), only the
+        // registry value Explorer itself keeps for the Documents folder and environment variables
+        std::string docs = documentsFolder(), local = envVar("LOCALAPPDATA");
 
-        size_t before = 0;
-        if (docs[0]) guardProfiles(std::string(docs) + "\\S2\\users");
-        bool repaired = false;
-        for (auto& m : g_pending) if (m.find("damaged") != std::string::npos) repaired = true;
-        before = g_pending.size();
-        if (local[0]) guardCache(gameRoot, std::string(local) + "\\S2", std::string(docs) + "\\S2\\dumps", iniPath);
-        for (size_t i = before; i < g_pending.size(); i++) repaired = true;   // every cache message is an event
-        flushLog(repaired);
+        if (!docs.empty()) guardProfiles(docs + "\\S2\\users");
+        if (!local.empty()) guardCache(gameRoot, local + "\\S2", docs + "\\S2\\dumps", iniPath);
+        flushLog(g_repaired);
     }
 
     bool meshCacheAllowed() { return g_cacheAllowed; }
+
+    static void writeMarker() {
+        if (g_marker.empty()) return;
+        HANDLE h = CreateFileA(g_marker.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+        if (h != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(h, "1", 1, &w, nullptr); CloseHandle(h); }
+    }
+
+    void onDeviceCreated() { writeMarker(); }
 
     void onCleanExit() {
         if (!g_marker.empty()) DeleteFileA(g_marker.c_str());

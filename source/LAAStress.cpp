@@ -114,6 +114,7 @@ namespace LAAStress {
         }
         g_keepMB = GetPrivateProfileIntA("Misc", "LAAStressFreeMB", 0, iniPath);
         g_delay = GetPrivateProfileIntA("Misc", "LAAStressDelay", 120, iniPath);
-        CloseHandle(CreateThread(nullptr, 0, monitor, nullptr, 0, nullptr));
+        HANDLE th = CreateThread(nullptr, 0, monitor, nullptr, 0, nullptr);
+        if (th) CloseHandle(th); else logf("monitor thread could not be started");
     }
 }

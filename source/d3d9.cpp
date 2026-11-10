@@ -124,6 +124,7 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
     if (SUCCEEDED(hr)) {
         UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
         GfxPatches::onDeviceCreated();
+        GameGuard::onDeviceCreated();
     }
 
     return hr;
@@ -312,7 +313,12 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             getGameDirectory(baseModule, gameRoot, MAX_PATH, "", 1);
             // profile backup/restore and mesh cache guard (before the game reads its profile or cache)
             GameGuard::startup(gameRoot, configPath, debug);
-            ModSync::apply(gameRoot, configPath, logPath("\\bin\\modsync.log", modLog));
+            // pack files and the HD interface need the Community Patch's file-load hook (unencrypted files,
+            // name of the loaded file); it is installed only with FileLoadPatch on a supported exe
+            const bool fileHook = gameSettings->bFileLoadPatch &&
+                settings->gameVersion != V_UNSUPPORTED && settings->gameVersion != V_UNKNOWN;
+            if (!fileHook) UIScale::disableHDInterface("[Misc] FileLoadPatch is off or the game version is not supported");
+            ModSync::apply(gameRoot, configPath, logPath("\\bin\\modsync.log", modLog), fileHook);
         }
         Logging::Logger logger("DX9", logFile, gameSettings->bDebugWindow);
         MainPatch::startupMessage();
@@ -588,6 +594,7 @@ ULONG f_IDirect3DDevice9::Release()
 {
     ULONG count = f_pD3DDevice->Release();
     if (count == 0) {
+        GameGuard::onCleanExit();   // game shut its renderer down (also covers a quit via TerminateProcess)
         delete(this);
     }
     return (count);
@@ -615,7 +622,9 @@ HRESULT f_IDirect3DDevice9::CreateAdditionalSwapChain(D3DPRESENT_PARAMETERS *pPr
 
 HRESULT f_IDirect3DDevice9::CreateCubeTexture(THIS_ UINT EdgeLength, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DCubeTexture9** ppCubeTexture, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateCubeTexture(EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateCubeTexture(EdgeLength, Levels, Usage, Format, Pool, ppCubeTexture, pSharedHandle);
+    if (SUCCEEDED(hr) && ppCubeTexture) UIScale::onCreateObject(*ppCubeTexture);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::CreateDepthStencilSurface(THIS_ UINT Width, UINT Height, D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Discard, IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
@@ -645,12 +654,16 @@ HRESULT f_IDirect3DDevice9::CreateTexture(THIS_ UINT Width, UINT Height, UINT Le
 
 HRESULT f_IDirect3DDevice9::CreateVertexBuffer(THIS_ UINT Length, DWORD Usage, DWORD FVF, D3DPOOL Pool, IDirect3DVertexBuffer9** ppVertexBuffer, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateVertexBuffer(Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateVertexBuffer(Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
+    if (SUCCEEDED(hr) && ppVertexBuffer) { UIScale::onCreateObject(*ppVertexBuffer); UIScale::onCreateVertexBuffer(*ppVertexBuffer, Usage); }
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::CreateVolumeTexture(THIS_ UINT Width, UINT Height, UINT Depth, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DVolumeTexture9** ppVolumeTexture, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateVolumeTexture(Width, Height, Depth, Levels, Usage, Format, Pool, ppVolumeTexture, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateVolumeTexture(Width, Height, Depth, Levels, Usage, Format, Pool, ppVolumeTexture, pSharedHandle);
+    if (SUCCEEDED(hr) && ppVolumeTexture) UIScale::onCreateObject(*ppVolumeTexture);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::BeginStateBlock()
@@ -1146,7 +1159,9 @@ HRESULT f_IDirect3DDevice9::GetFVF(THIS_ DWORD* pFVF)
 
 HRESULT f_IDirect3DDevice9::CreateVertexDeclaration(THIS_ CONST D3DVERTEXELEMENT9* pVertexElements, IDirect3DVertexDeclaration9** ppDecl)
 {
-    return f_pD3DDevice->CreateVertexDeclaration(pVertexElements, ppDecl);
+    HRESULT hr = f_pD3DDevice->CreateVertexDeclaration(pVertexElements, ppDecl);
+    if (SUCCEEDED(hr) && ppDecl) UIScale::onCreateDecl(*ppDecl);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::SetVertexDeclaration(THIS_ IDirect3DVertexDeclaration9* pDecl)

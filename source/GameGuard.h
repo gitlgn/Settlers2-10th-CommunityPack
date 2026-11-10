@@ -12,6 +12,8 @@ namespace GameGuard {
     void startup(const char* gameRoot, const char* iniPath, bool debug);
     // value for engine.ini useMeshCache
     bool meshCacheAllowed();
-    // DLL_PROCESS_DETACH on process exit: the session ended normally
+    // a device exists: the session is running (marker for crash detection)
+    void onDeviceCreated();
+    // last device released or DLL_PROCESS_DETACH on process exit: the session ended normally
     void onCleanExit();
 }

@@ -19,6 +19,12 @@ namespace UIScale {
     void trackTexture(DWORD stage, void* tex);
     void onCreateTexture(UINT w, UINT h, DWORD usage, D3DPOOL pool, void* tex);   // recognises upscaled HUD textures (mods\ui_hd.sizes.txt)
     void trackStream(UINT n, IDirect3DVertexBuffer9* vb, UINT offset, UINT stride);
+    // a new object got an address: forget anything cached for a released object at that address
+    void onCreateObject(void* obj);
+    void onCreateDecl(IDirect3DVertexDeclaration9* decl);
+    void onCreateVertexBuffer(IDirect3DVertexBuffer9* vb, DWORD usage);
+    // the HD interface needs the Community Patch's file-load hook (attribution of loaded files)
+    void disableHDInterface(const char* reason);
 
     // vertices of the draw call (for user-pointer draws upData is set, otherwise stream 0 is read)
     struct DrawRange { const void* upData; UINT upStride; UINT first; UINT count; };
