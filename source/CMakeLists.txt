@@ -19,6 +19,8 @@ add_library(${PROJECT_NAME} SHARED
 	CrashDiag.cpp
 	LAAStress.cpp
 	GameGuard.cpp
+	TimeFix.cpp
+	SafeSave.cpp
 	ModSync.cpp
 	UIScale.cpp
 	GfxPatches.cpp

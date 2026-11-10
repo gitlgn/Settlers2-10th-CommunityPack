@@ -14,6 +14,8 @@
 #include "CrashDiag.h"
 #include "LAAStress.h"
 #include "GameGuard.h"
+#include "TimeFix.h"
+#include "SafeSave.h"
 #include "Lobby.h"
 #include "MainPatch.h"
 #include "ModSync.h"
@@ -125,6 +127,8 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
         UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
         GfxPatches::onDeviceCreated();
         GameGuard::onDeviceCreated();
+        TimeFix::onDeviceCreated();
+        SafeSave::onDeviceCreated();
     }
 
     return hr;
@@ -307,6 +311,10 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
 
             UIScale::init(configPath, logPath("\\bin\\uiscale.log", uiLog));
             GfxPatches::init(configPath, logPath("\\bin\\gfxpatches.log", gfxLog));
+            char timeLog[MAX_PATH];
+            TimeFix::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\timefix.log", timeLog));
+            char saveLog[MAX_PATH];
+            SafeSave::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\safesave.log", saveLog));
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];
