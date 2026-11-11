@@ -176,6 +176,36 @@ function Replace-Checked([string]$text, [string]$old, [string]$new, [string]$wha
     return $text.Replace($old, $new)
 }
 
+function Replace-Regex1([string]$text, [string]$pattern, [string]$replacement, [string]$what) {
+    $re = [regex]::new($pattern)
+    if (-not $re.IsMatch($text)) { throw "unexpected file content ($what) - unsupported game version?" }
+    return $re.Replace($text, $replacement, 1)
+}
+
+# improved terrain lighting (community_terrain.inc, switches [Graphics] ImprovedTerrain / TerrainDetail); Shader Model 3
+function Add-TerrainImprovements([string]$t) {
+    $t = Replace-Regex1 $t '(#include "shared\.inc")' ('$1' + "`r`n" + '#include "community_terrain.inc"') "terrain include"
+    $t = Replace-Regex1 $t '(D \*= calculateShadow\(IN\.shadow\);\s*\}\s*)D\s*\+= g_Ambient\.rgb;' ('$1' + "D`t+= CP_TerrainAmbient( N );`t// community pack") "terrain ambient"
+    $t = Replace-Regex1 $t '(float4\s+Tex\s*=\s*tex2D\( Texture0, IN\.texcoord0\.xy \);)' ('$1' + "`r`n`tTex.rgb`t= CP_TerrainDetail( Tex.rgb, IN.texcoord0.xy );`t// community pack") "terrain detail"
+    return $t.Replace("compile vs_2_0 TerrainVertexShader", "compile vs_3_0 TerrainVertexShader").Replace("compile ps_2_b TerrainPixelShader", "compile ps_3_0 TerrainPixelShader")
+}
+
+# improved water surface (community_water.inc, switch [Graphics] ImprovedWater); Shader Model 3
+function Add-WaterImprovements([string]$t) {
+    $t = Replace-Regex1 $t '(#include "shared\.inc")' ('$1' + "`r`n" + '#include "community_water.inc"') "water include"
+    $t = Replace-Regex1 $t 'float3\s+N0\s*=\s*2\.0 \* tex2D\( Texture0, IN\.texcoord0 \) - 1\.0;\s*float3\s+N1\s*=\s*2\.0 \* tex2D\( Texture1, IN\.texcoord1 \) - 1\.0;\s*float3\s+N\s*=\s*0\.5 \* \(N0\.xzy \+ N1\.xzy \);' `
+        ("float3`tN`t`t`t= CP_WaterNormal( IN.texcoord0, IN.texcoord1 );`t// community pack`r`n`tfloat`tshoreCP`t`t= bUseWorldMap ? tex2D( WorldTex, IN.worldCoord ).b : 0;") "water normal"
+    $t = Replace-Regex1 $t '(float\s+s\s*=\s*g_ReflectionFactor \* D\.r;[^\r\n]*)' ('$1' + "`r`n`ts`t= CP_WaterReflection( s, V, N );`t// community pack") "water fresnel"
+    $t = Replace-Regex1 $t '(float3\s+C\s*=\s*lerp\( g_WaveColor, g_WaterColor, N\.y \);)' ('$1' + "`r`n`t`tC`t= CP_WaterColor( C, shoreCP );`t// community pack") "water colour"
+    $t = Replace-Regex1 $t 'result\.rgb\s*=\s*D \* lerp\( g_WaveColor, g_WaterColor, N\.y \);' "result.rgb`t`t= D * CP_WaterColor( lerp( g_WaveColor, g_WaterColor, N.y ), shoreCP );" "water colour 2"
+    $t = Replace-Regex1 $t 'float3 halfVec\s*=\s*normalize\( normalize\(L\) \+ V \);\s*float specIntensity = pow\( dot\( halfVec, N \), 16 \);\s*float\s+S\s*=\s*saturate\( specIntensity \);' `
+        "float`tS`t`t`t= CP_WaterSpecular( L, V, N );`t// community pack" "water specular"
+    $t = Replace-Regex1 $t '(\s*// fog of war texture\s*\r?\n\s*if \( bUseWorldMap \))' `
+        ("`r`n`t// community pack: foam at the shore`r`n`tfloat`tfoamCP`t`t= CP_WaterFoam( shoreCP, N );`r`n" +
+         "`tresult.rgb`t= lerp( result.rgb, float3(0.95, 0.97, 1.0) * saturate(D), foamCP );`r`n`tresult.a`t= max( result.a, foamCP );`r`n" + '$1') "water foam"
+    return $t.Replace("compile vs_2_0 Water_VS_2_0", "compile vs_3_0 Water_VS_2_0").Replace("compile ps_2_b Water_PS_2_0", "compile ps_3_0 Water_PS_2_0")
+}
+
 function Reset-Pack([string]$pack) {
     $p = Join-Path $Mods $pack
     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
@@ -269,9 +299,13 @@ foreach ($f in Get-ChildItem (Join-Path $Data "gfx\fx_20") -Filter *.fx) {
     if ($t -notmatch '#include\s+"shared.inc"') { continue }
     $t = [regex]::Replace($t, '(#include\s+"shared.inc")', "#define SMOOTH_SHADOW8`r`n`$1")
     $t = $t.Replace("compile ps_2_0", "compile ps_2_b")
+    if ($f.Name -eq "terrain_shader.fx") { $t = Add-TerrainImprovements $t }
+    if ($f.Name -eq "water_shader.fx") { $t = Add-WaterImprovements $t }
     Write-PackFile "smooth_shadows" ("gfx\fx_20\" + $f.Name) $t
     $n++
 }
+Write-PackFile "smooth_shadows" "gfx\fx_20\community_terrain.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_terrain.inc")))
+Write-PackFile "smooth_shadows" "gfx\fx_20\community_water.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_water.inc")))
 Say "  settings and shader packs built ($n shaders)" Green
 
 # ------------------------------------------------------------------ optional: HD textures (S2-modders)

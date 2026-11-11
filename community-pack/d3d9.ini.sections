@@ -40,6 +40,14 @@ SSAOStrength = 0.6
 SSAORadius = 1.0
 ; depth of field (soft haze away from the focus): 0.0 = off ... 1.0 = original game, needs PostFX = on
 DOFStrength = 0.3
+; terrain: sky/ground ambient light and a fine detail layer when zoomed in (Shader Model 3, needs SmoothShadows = on)
+ImprovedTerrain = on
+; strength of the terrain detail layer 0.0 - 1.0
+TerrainDetail = 0.5
+; water: Fresnel reflection, four wave layers, sharper sun glints, lighter water and foam at the shore (Shader Model 3, needs SmoothShadows = on)
+ImprovedWater = on
+; the game's distance fog: with the extended zoom it turns every object pale when zoomed far out (off = no fog)
+DistanceFog = off
 
 [Misc]
 ; community pack: mesh cache (faster loading). Cleared automatically after a crash, switched off if its folder is not writable

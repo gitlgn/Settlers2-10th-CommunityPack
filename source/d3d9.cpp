@@ -755,6 +755,7 @@ HRESULT f_IDirect3DDevice9::SetClipStatus(CONST D3DCLIPSTATUS9 *pClipStatus)
 
 HRESULT f_IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE State, DWORD Value)
 {
+    if (State == D3DRS_FOGENABLE && Value && !GfxPatches::distanceFog()) Value = FALSE;
     return f_pD3DDevice->SetRenderState(State, Value);
 }
 

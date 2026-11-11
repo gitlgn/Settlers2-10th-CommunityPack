@@ -10,4 +10,7 @@ namespace GfxPatches {
     void onCreateTexture(UINT w, UINT h, DWORD usage, D3DFORMAT fmt, void* tex);
     void onSetTexture(DWORD stage, void* tex);
     void onPresent();
+    // [Graphics] DistanceFog: the game's fixed-function distance fog (off by default - with the extended zoom it
+    // turns every object pale; Shader Model 3 shaders such as the improved terrain never get it anyway)
+    bool distanceFog();
 }

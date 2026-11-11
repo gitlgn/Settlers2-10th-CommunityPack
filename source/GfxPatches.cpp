@@ -61,16 +61,18 @@ namespace GfxPatches {
         std::string dir = iniPath;
         for (int i = 0; i < 2; i++) { size_t p = dir.find_last_of('\\'); if (p != std::string::npos) dir.resize(p); }
         std::string path = dir + "\\data\\gfx\\fx_20\\community_settings.inc";
-        char text[512];
+        char text[1024];
         _snprintf_s(text, sizeof(text), _TRUNCATE,
             "// written by the Community Pack d3d9.dll from [Graphics] in bin\\d3d9.ini - changes here are overwritten\r\n"
             "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n"
-            "#define CP_DOF_STRENGTH %.2f\r\n",
+            "#define CP_DOF_STRENGTH %.2f\r\n#define CP_TERRAIN %d\r\n#define CP_TERRAIN_DETAIL %.2f\r\n#define CP_WATER %d\r\n",
             iniOn(iniPath, "FXAA", "on") ? 1 : 0, iniOn(iniPath, "SSAO", "on") ? 1 : 0,
             iniFloat(iniPath, "SSAOStrength", 0.6f, 0.0f, 1.0f), iniFloat(iniPath, "SSAORadius", 1.0f, 0.25f, 4.0f),
-            iniFloat(iniPath, "DOFStrength", 0.3f, 0.0f, 1.0f));
+            iniFloat(iniPath, "DOFStrength", 0.3f, 0.0f, 1.0f),
+            iniOn(iniPath, "ImprovedTerrain", "on") ? 1 : 0, iniFloat(iniPath, "TerrainDetail", 0.5f, 0.0f, 1.0f),
+            iniOn(iniPath, "ImprovedWater", "on") ? 1 : 0);
         // rewrite only on change (keeps the file date stable)
-        char old[512] = "";
+        char old[1024] = "";
         FILE* f = nullptr;
         if (fopen_s(&f, path.c_str(), "rb") == 0 && f) { size_t n = fread(old, 1, sizeof(old) - 1, f); old[n] = 0; fclose(f); }
         if (strcmp(old, text) == 0) return;
@@ -82,13 +84,16 @@ namespace GfxPatches {
         DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", local, MAX_PATH);
         if (!n || n >= MAX_PATH) return;
         std::string cache = std::string(local) + "\\S2\\";
-        WIN32_FIND_DATAA fd;
-        HANDLE h = FindFirstFileA((cache + "postprocess.fx*").c_str(), &fd);
-        if (h == INVALID_HANDLE_VALUE) return;
-        do {
-            if (DeleteFileA((cache + fd.cFileName).c_str())) logf("cached shader removed: %s", fd.cFileName);
-        } while (FindNextFileA(h, &fd));
-        FindClose(h);
+        // the shaders that include community_settings.inc
+        for (const char* name : { "postprocess.fx*", "terrain_shader.fx*", "water_shader.fx*" }) {
+            WIN32_FIND_DATAA fd;
+            HANDLE h = FindFirstFileA((cache + name).c_str(), &fd);
+            if (h == INVALID_HANDLE_VALUE) continue;
+            do {
+                if (DeleteFileA((cache + fd.cFileName).c_str())) logf("cached shader removed: %s", fd.cFileName);
+            } while (FindNextFileA(h, &fd));
+            FindClose(h);
+        }
     }
 
     // The game's post-processing (bloom, depth of field - and the pack's FXAA/SSAO in its combine pass) only runs
@@ -96,12 +101,15 @@ namespace GfxPatches {
     // the graphics settings object (0x6C4A10 + 0x0C, set at 0x405DC4); the game reads it when a map is loaded.
     static const DWORD SETTINGS_GUARD = 0x006C4A5C, SETTINGS_POSTFX = 0x006C4A1C, SETTINGS_VTABLE = 0x00662688;
     static int g_postfx = -1;     // -1 = leave as the command line set it
+    static bool g_fog = false;
+    bool distanceFog() { return g_fog; }
 
     void init(const char* iniPath, const char* logPath) {
         g_debug = logPath != nullptr;
         {
             char v[16];
             GetPrivateProfileStringA("Graphics", "PostFX", "on", v, sizeof(v), iniPath);
+            g_fog = iniOn(iniPath, "DistanceFog", "off");
             g_postfx = (_stricmp(v, "on") == 0 || _stricmp(v, "true") == 0 || strcmp(v, "1") == 0) ? 1
                      : (_stricmp(v, "off") == 0 || _stricmp(v, "false") == 0 || strcmp(v, "0") == 0) ? 0 : -1;
         }

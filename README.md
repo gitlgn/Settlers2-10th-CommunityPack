@@ -19,6 +19,8 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | ✨ | **Post-processing** – the game's bloom and depth of field, which normally need the launch parameter `-postFX` (GOG does not pass it), switched on by the DLL; Gaussian blur, adjustable depth-of-field haze (`DOFStrength`, default 0.3) | on |
 | 🔬 | **Supersampling** – 3D scene and interface rendered at 2× the resolution and shrunk: smooth foliage, roof and polygon edges, finer textures; optional MSAA on top (`SupersamplingMSAA`); about 10 % fewer FPS at 3440×1440 on an RX 9070 XT | `off` |
 | 🪚 | **FXAA** – edge smoothing in the post-processing pass (with post-processing the scene is rendered off-screen, where the patch's MSAA does not reach) | on |
+| ⛰️ | **Terrain lighting** – Shader Model 3: sky/ground ambient light for more relief, fine detail layer at close zoom (`ImprovedTerrain`, `TerrainDetail`) | on |
+| 🌊 | **Water** – Shader Model 3: Fresnel reflection, four wave layers, sharp sun glints, lighter water and a foam line at the shore (`ImprovedWater`) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
@@ -47,6 +49,7 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | Loading a cube map (`0x51F1F0`, e.g. `data\enviroment\cube_0.dds`) is not checked, the texture is used later without a check too | a damaged or unsupported file (e.g. from a mod) or too little memory crashes when a map loads | `GameFixes` – a small neutral replacement texture is used, the map loads |
 | Post-processing (bloom, depth of field) only runs with the launch parameter `-postFX` (`0x405D9A`), which neither GOG nor the shortcuts pass | the game's own post effects – and every shader effect built on them – never run | `PostFX` – the DLL sets the flag itself |
 | Compiled shaders are cached by file name (`%LOCALAPPDATA%\S2`) | changed shader settings have no effect until the cache is cleared | the DLL drops the cached post-processing shader when FXAA/SSAO/DOF settings change |
+| Direct3D distance fog is switched on for all objects (`0x50C1A0`), tuned for the original zoom | with the extended zoom every tree, house and rock turns pale blue when zoomed far out | `DistanceFog = off` – the DLL blocks the fog state |
 | Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
 
 Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version.
@@ -113,6 +116,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
 | `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |
+| `community-pack/shaders/community_terrain.inc`, `community_water.inc` | improved terrain and water lighting (included by the patched shaders) |
 | `community-pack/` | installer, uninstaller, ini template, release script, user README |
 
 ## Related community projects
