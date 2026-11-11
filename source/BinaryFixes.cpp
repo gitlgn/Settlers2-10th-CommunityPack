@@ -128,6 +128,84 @@ namespace BinaryFixes {
         return true;
     }
 
+    // ---- cube texture (0x51F1F0, S2CE::CCubeTexture::CreateD3DTexture): the result of
+    // D3DXCreateCubeTextureFromFileInMemoryEx is not checked before GetLevelDesc is called on the texture, and the
+    // engine binds the texture later without a check either (0x51F2B0). A damaged/unsupported cube map (e.g. from a
+    // mod, data\enviroment\cube_0.dds) or an out-of-memory error crashes on a NULL texture. Now a small neutral
+    // cube texture is used instead (the map loads, only the environment reflection is plain).
+    static const DWORD CUBE_AT = 0x0051F233, CUBE_BACK = 0x0051F23E, CUBE_FAIL = 0x0051F295;   // fail: mov al, bl (bl = 0)
+    static const BYTE CUBE_BYTES[] = { 0x8B, 0x3F, 0x8D, 0x4C, 0x24, 0x10, 0x51, 0x6A, 0x00, 0x8B, 0xE8 };
+    static const BYTE CUBE_FAIL_BYTES[] = { 0x8A, 0xC3, 0x5F, 0x5E, 0x5D, 0x5B };              // mov al,bl; pop x4
+    static volatile LONG g_cubeFallbacks = 0;
+    static void logCubeFallback();
+
+    // object layout (CCubeTexture): +0x0C device, +0x10 IDirect3DCubeTexture9*
+    static void* __stdcall cubeFallback(BYTE* obj) {
+        __try {
+            void** dev = *(void***)(obj + 0x0C);
+            if (!dev) return nullptr;
+            typedef HRESULT(__stdcall* CreateCube_t)(void*, UINT, UINT, DWORD, DWORD, DWORD, void**, HANDLE*);
+            typedef HRESULT(__stdcall* LockCube_t)(void*, DWORD, UINT, void*, const RECT*, DWORD);
+            typedef HRESULT(__stdcall* UnlockCube_t)(void*, DWORD, UINT);
+            void* tex = nullptr;
+            const UINT N = 4;
+            // IDirect3DDevice9::CreateCubeTexture (vtable 25): A8R8G8B8 (21), D3DPOOL_MANAGED (1)
+            if (((CreateCube_t)(*(void***)dev)[25])(dev, N, 1, 0, 21, 1, &tex, nullptr) < 0 || !tex) return nullptr;
+            struct { INT pitch; void* bits; } lr;
+            for (DWORD face = 0; face < 6; face++) {
+                // IDirect3DCubeTexture9::LockRect (vtable 19) / UnlockRect (20)
+                if (((LockCube_t)(*(void***)tex)[19])(tex, face, 0, &lr, nullptr, 0) < 0) continue;
+                for (UINT y = 0; y < N; y++)
+                    for (UINT x = 0; x < N; x++)
+                        ((DWORD*)((BYTE*)lr.bits + y * lr.pitch))[x] = 0xFF8C9BAA;   // soft grey-blue sky
+                ((UnlockCube_t)(*(void***)tex)[20])(tex, face, 0);
+            }
+            *(void**)(obj + 0x10) = tex;
+            InterlockedIncrement(&g_cubeFallbacks);
+            logCubeFallback();
+            return tex;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return nullptr; }
+    }
+
+    static bool applyCubeTextureCheck() {
+        if (memcmp((void*)CUBE_AT, CUBE_BYTES, sizeof(CUBE_BYTES)) != 0 ||
+            memcmp((void*)CUBE_FAIL, CUBE_FAIL_BYTES, sizeof(CUBE_FAIL_BYTES)) != 0) return false;
+        BYTE* s = (BYTE*)VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!s) return false;
+        BYTE code[45] = {
+            0x8B, 0xE8,                                        //  0 mov ebp, eax        (HRESULT, as original)
+            0x8B, 0x3F,                                        //  2 mov edi, [edi]      (texture)
+            0x85, 0xED,                                        //  4 test ebp, ebp
+            0x7C, 0x10,                                        //  6 jl fail
+            0x85, 0xFF,                                        //  8 test edi, edi
+            0x74, 0x0C,                                        // 10 jz fail
+            0x8D, 0x4C, 0x24, 0x10,                            // 12 ok: lea ecx, [esp+0x10]
+            0x51,                                              // 16 push ecx
+            0x6A, 0x00,                                        // 17 push 0
+            0xE9, 0, 0, 0, 0,                                  // 19 jmp CUBE_BACK       (GetLevelDesc call)
+            0x56,                                              // 24 fail: push esi      (this)
+            0xE8, 0, 0, 0, 0,                                  // 25 call cubeFallback
+            0x85, 0xC0,                                        // 30 test eax, eax
+            0x74, 0x06,                                        // 32 jz give_up
+            0x8B, 0xF8,                                        // 34 mov edi, eax
+            0x33, 0xED,                                        // 36 xor ebp, ebp        (S_OK -> returns true)
+            0xEB, 0xE4,                                        // 38 jmp ok
+            0xE9, 0, 0, 0, 0,                                  // 40 give_up: jmp CUBE_FAIL (return false)
+        };
+        *(DWORD*)(code + 20) = CUBE_BACK - ((DWORD)s + 24);
+        *(DWORD*)(code + 26) = (DWORD)&cubeFallback - ((DWORD)s + 30);
+        *(DWORD*)(code + 41) = CUBE_FAIL - ((DWORD)s + 45);
+        memcpy(s, code, sizeof(code));
+        BYTE jmp[11] = { 0xE9, 0, 0, 0, 0, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+        *(DWORD*)(jmp + 1) = (DWORD)s - (CUBE_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)CUBE_AT, sizeof(jmp), PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)CUBE_AT, jmp, sizeof(jmp));
+        VirtualProtect((void*)CUBE_AT, sizeof(jmp), old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)CUBE_AT, sizeof(jmp));
+        return true;
+    }
+
     // ---- game load (0x44A440, called by nGame::File::load): a damaged savegame/map makes the loader read
     // garbage counts and throw a C++ exception ("vector<T> too long"), which nobody catches -> the game quits.
     // The load runs inside an exception frame. The loader has already torn down the previous game state when it
@@ -295,6 +373,10 @@ namespace BinaryFixes {
         if (fopen_s(&f, g_log.c_str(), "a") == 0 && f) { fprintf(f, fmt, a, b); fputc('\n', f); fclose(f); }
     }
 
+    static void logCubeFallback() {
+        logf("cube texture could not be loaded (damaged/unsupported file or out of memory): %s", "neutral replacement used");
+    }
+
     void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace) {
         g_log = logPath ? logPath : "";
         if (logPath) DeleteFileA(logPath);
@@ -414,5 +496,7 @@ namespace BinaryFixes {
             "game load: a C++ exception from a damaged file aborts the load instead of quitting (0x44A440)");
         logf(applyTransferPathCheck() ? "applied: %s" : "skipped (code differs): %s",
             "multiplayer file transfer: requested names limited to the Documents folder (0x42B2B0)");
+        logf(applyCubeTextureCheck() ? "applied: %s" : "skipped (code differs): %s",
+            "cube texture: a failed load gets a neutral replacement instead of crashing on a NULL texture (0x51F1F0)");
     }
 }
