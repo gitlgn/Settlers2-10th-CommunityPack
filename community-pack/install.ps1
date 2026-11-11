@@ -206,6 +206,21 @@ function Add-WaterImprovements([string]$t) {
     return $t.Replace("compile vs_2_0 Water_VS_2_0", "compile vs_3_0 Water_VS_2_0").Replace("compile ps_2_b Water_PS_2_0", "compile ps_3_0 Water_PS_2_0")
 }
 
+# sky/ground ambient light for objects (community_objects.inc, switch [Graphics] ImprovedObjects): the vertex shaders
+# store how much the surface faces up in the unused alpha of their light colour, CalcLight uses it
+function Add-ObjectSharedInc([string]$t) {
+    $t = Replace-Regex1 $t '\n(float4 CalcLight\s*\()' ("`n#include `"community_objects.inc`"`r`n`r`n" + '$1') "shared.inc objects include"
+    $a = $t.IndexOf("float4 CalcLight"); $b = $t.IndexOf("return float4(diffuse,1);", $a)
+    if ($a -lt 0 -or $b -lt 0) { throw "unexpected file content (shared.inc CalcLight) - unsupported game version?" }
+    $body = $t.Substring($a, $b - $a)
+    if (([regex]::Matches($body, [regex]::Escape("diffuse = g_Ambient.rgb +"))).Count -ne 3) { throw "unexpected file content (shared.inc CalcLight ambient) - unsupported game version?" }
+    return $t.Substring(0, $a) + $body.Replace("diffuse = g_Ambient.rgb +", "diffuse = CP_ObjectAmbient(_IN_color.a) +") + $t.Substring($b)
+}
+function Add-ObjectLighting([string]$t) {
+    return [regex]::Replace($t, '(OUT\.color\s*=\s*saturate\(dot\(([\w.]+),-g_MainLight\.xyz\)\) \* g_LightColor(?: \* IN\.color)?;)',
+        ('$1' + "`r`n`tCP_SET_UP( OUT.color, " + '$2' + " );`t// community pack"))
+}
+
 function Reset-Pack([string]$pack) {
     $p = Join-Path $Mods $pack
     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
@@ -291,6 +306,7 @@ float calculateShadow8(const float4 shadow)
 
 "@
 $shared = Replace-Checked $shared "#endif // HW_SHADOW_MAP" ($pcf + "#endif // HW_SHADOW_MAP") "shared.inc"
+$shared = Add-ObjectSharedInc $shared
 Write-PackFile "smooth_shadows" "gfx\fx_20\shared.inc" $shared
 $n = 0
 foreach ($f in Get-ChildItem (Join-Path $Data "gfx\fx_20") -Filter *.fx) {
@@ -299,11 +315,13 @@ foreach ($f in Get-ChildItem (Join-Path $Data "gfx\fx_20") -Filter *.fx) {
     if ($t -notmatch '#include\s+"shared.inc"') { continue }
     $t = [regex]::Replace($t, '(#include\s+"shared.inc")', "#define SMOOTH_SHADOW8`r`n`$1")
     $t = $t.Replace("compile ps_2_0", "compile ps_2_b")
+    $t = Add-ObjectLighting $t
     if ($f.Name -eq "terrain_shader.fx") { $t = Add-TerrainImprovements $t }
     if ($f.Name -eq "water_shader.fx") { $t = Add-WaterImprovements $t }
     Write-PackFile "smooth_shadows" ("gfx\fx_20\" + $f.Name) $t
     $n++
 }
+Write-PackFile "smooth_shadows" "gfx\fx_20\community_objects.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_objects.inc")))
 Write-PackFile "smooth_shadows" "gfx\fx_20\community_terrain.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_terrain.inc")))
 Write-PackFile "smooth_shadows" "gfx\fx_20\community_water.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_water.inc")))
 Say "  settings and shader packs built ($n shaders)" Green

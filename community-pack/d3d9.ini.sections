@@ -46,6 +46,8 @@ ImprovedTerrain = on
 TerrainDetail = 0.5
 ; water: Fresnel reflection, four wave layers, sharper sun glints, lighter water and foam at the shore (Shader Model 3, needs SmoothShadows = on)
 ImprovedWater = on
+; houses, trees, rocks, settlers: the same sky/ground ambient light as the terrain (needs SmoothShadows = on)
+ImprovedObjects = on
 ; the game's distance fog: with the extended zoom it turns every object pale when zoomed far out (off = no fog)
 DistanceFog = off
 

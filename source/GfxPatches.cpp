@@ -65,12 +65,12 @@ namespace GfxPatches {
         _snprintf_s(text, sizeof(text), _TRUNCATE,
             "// written by the Community Pack d3d9.dll from [Graphics] in bin\\d3d9.ini - changes here are overwritten\r\n"
             "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n"
-            "#define CP_DOF_STRENGTH %.2f\r\n#define CP_TERRAIN %d\r\n#define CP_TERRAIN_DETAIL %.2f\r\n#define CP_WATER %d\r\n",
+            "#define CP_DOF_STRENGTH %.2f\r\n#define CP_TERRAIN %d\r\n#define CP_TERRAIN_DETAIL %.2f\r\n#define CP_WATER %d\r\n#define CP_OBJECTS %d\r\n",
             iniOn(iniPath, "FXAA", "on") ? 1 : 0, iniOn(iniPath, "SSAO", "on") ? 1 : 0,
             iniFloat(iniPath, "SSAOStrength", 0.6f, 0.0f, 1.0f), iniFloat(iniPath, "SSAORadius", 1.0f, 0.25f, 4.0f),
             iniFloat(iniPath, "DOFStrength", 0.3f, 0.0f, 1.0f),
             iniOn(iniPath, "ImprovedTerrain", "on") ? 1 : 0, iniFloat(iniPath, "TerrainDetail", 0.5f, 0.0f, 1.0f),
-            iniOn(iniPath, "ImprovedWater", "on") ? 1 : 0);
+            iniOn(iniPath, "ImprovedWater", "on") ? 1 : 0, iniOn(iniPath, "ImprovedObjects", "on") ? 1 : 0);
         // rewrite only on change (keeps the file date stable)
         char old[1024] = "";
         FILE* f = nullptr;
@@ -84,8 +84,8 @@ namespace GfxPatches {
         DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", local, MAX_PATH);
         if (!n || n >= MAX_PATH) return;
         std::string cache = std::string(local) + "\\S2\\";
-        // the shaders that include community_settings.inc
-        for (const char* name : { "postprocess.fx*", "terrain_shader.fx*", "water_shader.fx*" }) {
+        // every shader includes community_settings.inc (through shared.inc / community_objects.inc)
+        for (const char* name : { "*.fx*" }) {
             WIN32_FIND_DATAA fd;
             HANDLE h = FindFirstFileA((cache + name).c_str(), &fd);
             if (h == INVALID_HANDLE_VALUE) continue;
