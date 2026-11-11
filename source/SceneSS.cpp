@@ -127,6 +127,8 @@ namespace SceneSS {
     static IDirect3DSurface9* g_autoDS = nullptr;  // device's own depth buffer (no reference held)
     static IDirect3DSurface9* g_rt = nullptr;      // our 2x colour target (own reference)
     static IDirect3DSurface9* g_ds = nullptr;      // our 2x depth buffer (own reference)
+    static IDirect3DSurface9* g_resolve = nullptr; // 2x without MSAA (only with SupersamplingMSAA)
+    static int g_msaaWant = 0, g_msaa = 0;
     static UINT g_w = 0, g_h = 0;                  // game resolution
     static bool g_onSS = true;
     static std::vector<D3DRECT> g_rects;
@@ -135,6 +137,8 @@ namespace SceneSS {
         char v[16];
         GetPrivateProfileStringA("Graphics", "Supersampling", "off", v, sizeof(v), iniPath);
         g_want = _stricmp(v, "on") == 0 || _stricmp(v, "true") == 0 || strcmp(v, "1") == 0 || strcmp(v, "2") == 0;
+        g_msaaWant = GetPrivateProfileIntA("Graphics", "SupersamplingMSAA", 0, iniPath);
+        if (g_msaaWant != 2 && g_msaaWant != 4 && g_msaaWant != 8) g_msaaWant = 0;
     }
 
     bool active() { return g_factor > 1; }
@@ -142,6 +146,8 @@ namespace SceneSS {
     void release() {
         if (g_rt) { g_rt->Release(); g_rt = nullptr; }
         if (g_ds) { g_ds->Release(); g_ds = nullptr; }
+        if (g_resolve) { g_resolve->Release(); g_resolve = nullptr; }
+        g_msaa = 0;
         g_bb = g_autoDS = nullptr;
         g_factor = 1;
     }
@@ -169,8 +175,26 @@ namespace SceneSS {
         IDirect3DSurface9* ds = nullptr;
         D3DSURFACE_DESC dd = {};
         if (SUCCEEDED(dev->GetDepthStencilSurface(&ds)) && ds) { ds->GetDesc(&dd); g_autoDS = ds; ds->Release(); }
-        HRESULT h1 = dev->CreateRenderTarget(w, h, d.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &g_rt, nullptr);
-        HRESULT h2 = g_autoDS ? dev->CreateDepthStencilSurface(w, h, dd.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &g_ds, nullptr) : S_OK;
+        // multisampling of the large target (the back buffer's own MSAA does not reach it)
+        g_msaa = 0;
+        if (g_msaaWant) {
+            IDirect3D9* d3d = nullptr;
+            if (SUCCEEDED(dev->GetDirect3D(&d3d)) && d3d) {
+                D3DMULTISAMPLE_TYPE t = (D3DMULTISAMPLE_TYPE)g_msaaWant;
+                if (SUCCEEDED(d3d->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, d.Format, TRUE, t, nullptr)) &&
+                    (!g_autoDS || SUCCEEDED(d3d->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, dd.Format, TRUE, t, nullptr))))
+                    g_msaa = g_msaaWant;
+                else logf("supersampling: MSAA %dx not supported - without MSAA", g_msaaWant);
+                d3d->Release();
+            }
+        }
+        D3DMULTISAMPLE_TYPE ms = (D3DMULTISAMPLE_TYPE)g_msaa;
+        HRESULT h1 = dev->CreateRenderTarget(w, h, d.Format, ms, 0, FALSE, &g_rt, nullptr);
+        HRESULT h2 = g_autoDS ? dev->CreateDepthStencilSurface(w, h, dd.Format, ms, 0, FALSE, &g_ds, nullptr) : S_OK;
+        if (SUCCEEDED(h1) && SUCCEEDED(h2) && g_msaa) {
+            HRESULT h3 = dev->CreateRenderTarget(w, h, d.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &g_resolve, nullptr);
+            if (FAILED(h3)) { logf("supersampling: resolve target failed (0x%08lX)", h3); h1 = h3; }
+        }
         if (FAILED(h1) || FAILED(h2)) {
             logf("supersampling off: render target %ux%u could not be created (0x%08lX / 0x%08lX)", w, h, h1, h2);
             release();
@@ -182,7 +206,7 @@ namespace SceneSS {
         if (g_ds) dev->SetDepthStencilSurface(g_ds);
         g_onSS = true;
         UIScale::setSupersample(2);
-        logf("supersampling on: game %ux%u (format %d), render target %ux%u, depth format %d", g_w, g_h, (int)d.Format, w, h, (int)dd.Format);
+        logf("supersampling on: game %ux%u (format %d), render target %ux%u, depth format %d, MSAA %dx", g_w, g_h, (int)d.Format, w, h, (int)dd.Format, g_msaa);
     }
 
     IDirect3DSurface9* renderTarget(DWORD i, IDirect3DSurface9* rt) {
@@ -197,7 +221,10 @@ namespace SceneSS {
 
     void beforePresent(IDirect3DDevice9* dev) {
         if (g_factor == 1 || !g_rt || !g_bb) return;
-        dev->StretchRect(g_rt, nullptr, g_bb, nullptr, D3DTEXF_LINEAR);
+        if (g_resolve) {
+            dev->StretchRect(g_rt, nullptr, g_resolve, nullptr, D3DTEXF_NONE);     // MSAA resolve, same size
+            dev->StretchRect(g_resolve, nullptr, g_bb, nullptr, D3DTEXF_LINEAR);
+        } else dev->StretchRect(g_rt, nullptr, g_bb, nullptr, D3DTEXF_LINEAR);
     }
 
     static void trackRT(DWORD, IDirect3DSurface9*) {}
