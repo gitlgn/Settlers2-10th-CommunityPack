@@ -17,6 +17,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 💧 | **Reflection resolution** – water reflection 4096×2048 instead of 2048×1024 | `2` |
 | 🌲 | **View distance** – less LOD pop-in when zoomed out | on |
 | ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
+| 🔬 | **Supersampling** – 3D scene and interface rendered at 2× the resolution and shrunk: smooth foliage, roof and polygon edges, finer textures; optional MSAA on top (`SupersamplingMSAA`); about 10 % fewer FPS at 3440×1440 on an RX 9070 XT | `off` |
 | 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
@@ -104,6 +105,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/GameGuard.*` | profile backup/restore (`Documents\S2\users\backup`), mesh/shader cache guard (`%LOCALAPPDATA%\S2`) |
 | `source/TimeFix.*`, `source/SafeSave.*`, `source/BinaryFixes.*` | fixes for the original game (clocks, atomic saving, byte patches + command dispatcher check) |
 | `source/NetTrace.*` | multiplayer diagnostics (`DebugMode`): received messages, executed commands, mouse clicks → `bin\nettrace.log` |
+| `source/SceneSS.*` | supersampling (own 2× render target in place of the back buffer), one-frame D3D9 trace for `DebugMode` |
 | `source/LowHeap.*` | keeps the memory of the game's D3DX below 2 GB (4 GB flag) |
 | `source/FixDecisions.*`, `source/tests/` | decision logic of the binary fixes + headless tests (`cmake --build build --target FixTests`) |
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
