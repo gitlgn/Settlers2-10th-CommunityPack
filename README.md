@@ -46,6 +46,10 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | Game command `0x2002F` writes with an unchecked index (`0x610390`) | a damaged command can overwrite memory outside a building | `GameFixes` – only valid indices (0–4) |
 | Game command `0x20022` uses an unchecked index (`0x60F6F0`) | access outside a 6-entry table | `GameFixes` – invalid commands ignored |
 | The player lookup of 21 command types has no range check (`0x454200`); a sender that no longer exists yields player -1 | access before the player table | `GameFixes` – such commands are skipped |
+| Header texts of savegames and maps are read with an unchecked length into a 2 KB stack buffer (`0x448B10`) | a damaged or crafted map/savegame overwrites the stack | `GameFixes` – length limited to the buffer |
+| The stream reader's size check can overflow, string lengths are not checked against the remaining data (`0x412CD0`, `0x412D80`) | damaged savegames, maps or network data read past the buffer | `GameFixes` – checks without overflow, lengths clamped |
+| A damaged savegame/map throws a C++ exception nobody catches (`0x44A440`) | the game vanishes without a message | `GameFixes` – clear message, clean exit |
+| The multiplayer file transfer (map download) uses the requested file name unchecked (`0x6E2868`) | any player in a game can download any file the host can read (`..\`, absolute paths) | `GameFixes` – names limited to the Documents folder |
 | The shader compiler `d3dx9_29` fails with `E_OUTOFMEMORY` as soon as its memory lies above 2 GB | with the 4 GB flag the game can no longer build shaders once the lower 2 GB are used up | `LowHeap` – the compiler's allocations (malloc/new/HeapAlloc) go to address space reserved below 2 GB at start; when it is full, the normal allocator is used |
 | Loading a cube map (`0x51F1F0`, e.g. `data\enviroment\cube_0.dds`) is not checked, the texture is used later without a check too | a damaged or unsupported file (e.g. from a mod) or too little memory crashes when a map loads | `GameFixes` – a small neutral replacement texture is used, the map loads |
 | Post-processing (bloom, depth of field) only runs with the launch parameter `-postFX` (`0x405D9A`), which neither GOG nor the shortcuts pass | the game's own post effects – and every shader effect built on them – never run | `PostFX` – the DLL sets the flag itself |
@@ -53,7 +57,7 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | Direct3D distance fog is switched on for all objects (`0x50C1A0`), tuned for the original zoom | with the extended zoom every tree, house and rock turns pale blue when zoomed far out | `DistanceFog = off` – the DLL blocks the fog state |
 | Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
 
-Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version.
+Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version. The loading fixes were tested with deliberately damaged savegames (huge string length, truncated file, random bytes) and a damaged cube map; the file transfer check is not yet tested with a real map download. Note: the game only offers downloads of maps in `Documents\S2\maps`, not of maps in the game folder.
 ## Showcase
 
 Same savegame, 3440×1440. Click an image for full resolution.
