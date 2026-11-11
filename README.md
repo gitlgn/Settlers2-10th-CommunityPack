@@ -19,7 +19,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
 | 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
-| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: game code runs with its memory above 2 GB – only the game's shader compiler d3dx9_29 cannot, see notes) | on |
+| 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
 | 🧹 | **Mesh cache guard** – clears the mesh/shader cache after a crash and disables it if its folder is not writable (known cause of crashes a few minutes into a map); `[Misc] MeshCache` | on |
 | ⏱️ | **Clock fix** – the game's clocks count from game start instead of Windows start; animations and timers no longer get coarse with long PC uptime; `[Misc] TimeFix` | on |
@@ -42,6 +42,7 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | Game command `0x2002F` writes with an unchecked index (`0x610390`) | a damaged command can overwrite memory outside a building | `GameFixes` – only valid indices (0–4) |
 | Game command `0x20022` uses an unchecked index (`0x60F6F0`) | access outside a 6-entry table | `GameFixes` – invalid commands ignored |
 | The player lookup of 21 command types has no range check (`0x454200`); a sender that no longer exists yields player -1 | access before the player table | `GameFixes` – such commands are skipped |
+| The shader compiler `d3dx9_29` fails with `E_OUTOFMEMORY` as soon as its memory lies above 2 GB | with the 4 GB flag the game can no longer build shaders once the lower 2 GB are used up | `LowHeap` – the compiler's allocations (malloc/new/HeapAlloc) go to address space reserved below 2 GB at start; when it is full, the normal allocator is used |
 | Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
 
 Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version.
@@ -102,6 +103,8 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/GameGuard.*` | profile backup/restore (`Documents\S2\users\backup`), mesh/shader cache guard (`%LOCALAPPDATA%\S2`) |
 | `source/TimeFix.*`, `source/SafeSave.*`, `source/BinaryFixes.*` | fixes for the original game (clocks, atomic saving, byte patches + command dispatcher check) |
 | `source/NetTrace.*` | multiplayer diagnostics (`DebugMode`): received messages, executed commands, mouse clicks → `bin\nettrace.log` |
+| `source/LowHeap.*` | keeps the memory of the game's D3DX below 2 GB (4 GB flag) |
+| `source/FixDecisions.*`, `source/tests/` | decision logic of the binary fixes + headless tests (`cmake --build build --target FixTests`) |
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
 | `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |

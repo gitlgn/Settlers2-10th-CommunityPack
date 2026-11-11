@@ -43,3 +43,5 @@ TimeFix = on
 SafeSave = on
 ; multiplayer robustness: network buffer overflow, unchecked indices in game commands, commands of players who left
 GameFixes = on
+; 4 GB memory: keeps memory below 2 GB for the game's shader compiler, which fails above 2 GB (only active with the 4 GB flag)
+LowHeap = on

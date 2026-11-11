@@ -18,6 +18,7 @@ add_library(${PROJECT_NAME} SHARED
 	MainPatchASM.cpp
 	CrashDiag.cpp
 	LAAStress.cpp
+	LowHeap.cpp
 	GameGuard.cpp
 	TimeFix.cpp
 	SafeSave.cpp
@@ -26,6 +27,7 @@ add_library(${PROJECT_NAME} SHARED
 	ModSync.cpp
 	UIScale.cpp
 	GfxPatches.cpp
+	FixDecisions.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE CppUtils)
@@ -47,3 +49,18 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE pch.h)
+
+# Headless unit tests: exercise the real FixDecisions logic (the same .cpp the DLL links) without the
+# game, a second LAN player or a live network transfer. Build: cmake --build build --target FixTests
+# Run:  build\bin\FixTests.exe
+add_executable(FixTests
+	FixDecisions.cpp
+	tests/FixTestsMain.cpp
+)
+target_link_libraries(FixTests PRIVATE CppUtils)
+target_include_directories(FixTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(FixTests PRIVATE cxx_std_20)
+set_target_properties(FixTests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+target_precompile_headers(FixTests PRIVATE pch.h)

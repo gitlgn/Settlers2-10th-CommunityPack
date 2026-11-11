@@ -13,6 +13,7 @@
 #include "Config.h"
 #include "CrashDiag.h"
 #include "LAAStress.h"
+#include "LowHeap.h"
 #include "GameGuard.h"
 #include "TimeFix.h"
 #include "SafeSave.h"
@@ -133,6 +134,7 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
         TimeFix::onDeviceCreated();
         SafeSave::onDeviceCreated();
         BinaryFixes::onDeviceCreated();
+        LowHeap::onDeviceCreated();
         NetTrace::onDeviceCreated(hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
     }
 
@@ -306,7 +308,10 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             };
             char diagLog[MAX_PATH], uiLog[MAX_PATH], gfxLog[MAX_PATH], modLog[MAX_PATH];
 
-            // must run first: reserves the address space below 2 GB before anything else allocates
+            // must run first: keeps address space below 2 GB for the game's D3DX (shader compiler)
+            char lowLog[MAX_PATH];
+            LowHeap::install(configPath, logPath("\\bin\\lowheap.log", lowLog));
+            // then the LAA test: reserves the remaining address space below 2 GB
             char laaLog[MAX_PATH];
             getGameDirectory(baseModule, laaLog, MAX_PATH, "\\bin\\laastress.log", 1);
             LAAStress::install(configPath, laaLog);
