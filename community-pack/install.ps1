@@ -204,7 +204,8 @@ $t = [IO.File]::ReadAllText((Get-Plain "gfx\fx_20\postprocess.fx"))
 $t = Replace-Checked $t "#define RCP_BLUR_SAMPLES`t1 / NUM_BLUR_SAMPLES" ("#define RCP_BLUR_SAMPLES`t1 / NUM_BLUR_SAMPLES`r`n`r`n" +
     "// community pack: gaussian weights (sum = 1) instead of a box filter`r`n" +
     "static const float g_BlurWeights[9] = { 0.0276, 0.0663, 0.1238, 0.1801, 0.2044, 0.1801, 0.1238, 0.0663, 0.0276 };`r`n`r`n" +
-    "// community pack: depth of field strength (1.0 = original)`r`n#define DOF_STRENGTH`t0.6") "postprocess.fx"
+    "// community pack: depth of field strength (1.0 = original), [Graphics] DOFStrength via community_settings.inc`r`n" +
+    "#ifdef CP_DOF_STRENGTH`r`n#define DOF_STRENGTH`tCP_DOF_STRENGTH`r`n#else`r`n#define DOF_STRENGTH`t0.6`r`n#endif") "postprocess.fx"
 $t = Replace-Checked $t "`t`tresult += tex2D( Texture0, blurCoord );" "`t`tresult += tex2D( Texture0, blurCoord ) * g_BlurWeights[i];" "postprocess.fx blur"
 $t = Replace-Checked $t "`treturn result * RCP_BLUR_SAMPLES;" "`treturn result;" "postprocess.fx blur return"
 $t = Replace-Checked $t "(depth.r  - g_CamFocus.x) * g_CamFocus.y)" "(depth.r  - g_CamFocus.x) * g_CamFocus.y * DOF_STRENGTH)" "postprocess.fx dof"

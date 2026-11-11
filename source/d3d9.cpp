@@ -134,8 +134,8 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
     // NOTE: initialize your custom D3D components here
     if (SUCCEEDED(hr)) {
         UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
-        SceneSS::onDeviceReady(*ppReturnedDeviceInterface);
         GfxPatches::onDeviceCreated();
+        SceneSS::onDeviceReady(*ppReturnedDeviceInterface);   // after GfxPatches: post effects flag
         GameGuard::onDeviceCreated();
         TimeFix::onDeviceCreated();
         SafeSave::onDeviceCreated();
@@ -662,6 +662,7 @@ HRESULT f_IDirect3DDevice9::CreateCubeTexture(THIS_ UINT EdgeLength, UINT Levels
 
 HRESULT f_IDirect3DDevice9::CreateDepthStencilSurface(THIS_ UINT Width, UINT Height, D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Discard, IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
 {
+    SceneSS::scaleCreate(Width, Height, D3DUSAGE_DEPTHSTENCIL);
     HRESULT hr = f_pD3DDevice->CreateDepthStencilSurface(Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
     if (SUCCEEDED(hr) && ppSurface) SceneSS::onCreate("CreateDepthStencilSurface", Width, Height, D3DUSAGE_DEPTHSTENCIL, Format, *ppSurface);
     return hr;
@@ -681,6 +682,7 @@ HRESULT f_IDirect3DDevice9::CreateRenderTarget(THIS_ UINT Width, UINT Height, D3
 
 HRESULT f_IDirect3DDevice9::CreateTexture(THIS_ UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9** ppTexture, HANDLE* pSharedHandle)
 {
+    SceneSS::scaleCreate(Width, Height, Usage);
     HRESULT hr = f_pD3DDevice->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
     if (SUCCEEDED(hr) && ppTexture) {
         GfxPatches::onCreateTexture(Width, Height, Usage, Format, *ppTexture);

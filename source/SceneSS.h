@@ -33,4 +33,6 @@ namespace SceneSS {
     const RECT* rect(const RECT* in, RECT& tmp);
     const D3DRECT* clearRects(DWORD count, const D3DRECT* in);
     bool active();
+    // with post effects: enlarges the game's screen-sized render targets / depth surfaces (returns true if changed)
+    bool scaleCreate(UINT& w, UINT& h, DWORD usage);
 }

@@ -132,6 +132,17 @@ namespace SceneSS {
     static UINT g_w = 0, g_h = 0;                  // game resolution
     static bool g_onSS = true;
     static std::vector<D3DRECT> g_rects;
+    // with the game's post-processing (-postFX) the scene goes into the game's own screen-sized targets and only the
+    // combine pass writes the back buffer: then those targets are enlarged instead (texture mode)
+    static bool g_texMode = false;
+    static UINT g_bbW = 0, g_bbH = 0;
+    static const DWORD POSTFX_FLAG = 0x006C4A1C, SETTINGS_GUARD = 0x006C4A5C, SETTINGS_VTABLE = 0x00662688;
+    static bool postfxOn() {
+        __try {
+            return (*(volatile DWORD*)SETTINGS_GUARD & 1) && *(volatile DWORD*)(POSTFX_FLAG - 0x0C) == SETTINGS_VTABLE &&
+                   *(volatile BYTE*)POSTFX_FLAG != 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
 
     static void readIni(const char* iniPath) {
         char v[16];
@@ -142,6 +153,15 @@ namespace SceneSS {
     }
 
     bool active() { return g_factor > 1; }
+
+    // texture mode: screen-sized render targets / depth surfaces of the post-processing get twice the size
+    bool scaleCreate(UINT& w, UINT& h, DWORD usage) {
+        if (!g_texMode || !g_want || w != g_bbW || h != g_bbH || !(usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL))) return false;
+        w *= 2; h *= 2;
+        static int n = 0;
+        if (n++ < 16) logf("scene target %ux%u usage %lX created at %ux%u", w / 2, h / 2, usage, w, h);
+        return true;
+    }
 
     void release() {
         if (g_rt) { g_rt->Release(); g_rt = nullptr; }
@@ -165,6 +185,15 @@ namespace SceneSS {
         }
         g_bb = bb; bb->Release();
         g_w = d.Width; g_h = d.Height;
+        g_bbW = d.Width; g_bbH = d.Height;
+        g_texMode = false;
+        if (postfxOn()) {
+            if (d.Width * 2 > 8192 || d.Height * 2 > 8192) { logf("supersampling off: %ux%u too large", d.Width * 2, d.Height * 2); UIScale::setSupersample(1); return; }
+            g_texMode = true;
+            UIScale::setSupersample(1);
+            logf("supersampling on (post effects): the game's %ux%u scene targets are created at 2x", d.Width, d.Height);
+            return;
+        }
         UINT w = d.Width * 2, h = d.Height * 2;
         D3DCAPS9 caps;
         if (w > 8192 || h > 8192 || (SUCCEEDED(dev->GetDeviceCaps(&caps)) && (w > caps.MaxTextureWidth || h > caps.MaxTextureHeight))) {

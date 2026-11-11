@@ -21,7 +21,9 @@ Scale = 1.5
 Filter = linear
 
 [Graphics]
-; supersampling: scene and interface are rendered at 2x the resolution and shrunk (much smoother edges, 4x GPU load; windowed mode)
+; the game's post-processing (bloom, depth of field) - normally only with the launch parameter -postFX; FXAA and SSAO need it
+PostFX = on
+; supersampling: scene and interface are rendered at 2x the resolution and shrunk (much smoother edges, 4x GPU load)
 Supersampling = off
 ; multisampling of the supersampled image: 0 = off, 2, 4, 8 (smooths polygon edges further, more GPU memory and load)
 SupersamplingMSAA = 0
@@ -29,13 +31,15 @@ SupersamplingMSAA = 0
 ShadowMapScale = 2
 ; water reflection resolution at the highest setting: 1 = original 2048x1024, 2 = 4096x2048, 4 = 8192x4096 (GOG build 11757 only)
 ReflectionMapScale = 2
-; edge smoothing of the 3D scene (needs ImprovedPostFX = on and post effects enabled in the game options)
+; edge smoothing of the 3D scene (needs PostFX = on and ImprovedPostFX = on)
 FXAA = on
-; ambient occlusion: contact shadows under trees, houses and in corners (needs ImprovedPostFX = on)
+; ambient occlusion: contact shadows under trees, houses and in corners (needs PostFX = on and ImprovedPostFX = on)
 SSAO = on
 ; SSAO darkness 0.0 - 1.0 and radius 0.25 - 4.0
 SSAOStrength = 0.6
 SSAORadius = 1.0
+; depth of field (soft haze away from the focus): 0.0 = off ... 1.0 = original game, needs PostFX = on
+DOFStrength = 0.3
 
 [Misc]
 ; community pack: mesh cache (faster loading). Cleared automatically after a crash, switched off if its folder is not writable

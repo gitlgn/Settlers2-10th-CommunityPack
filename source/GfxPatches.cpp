@@ -64,20 +64,47 @@ namespace GfxPatches {
         char text[512];
         _snprintf_s(text, sizeof(text), _TRUNCATE,
             "// written by the Community Pack d3d9.dll from [Graphics] in bin\\d3d9.ini - changes here are overwritten\r\n"
-            "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n",
+            "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n"
+            "#define CP_DOF_STRENGTH %.2f\r\n",
             iniOn(iniPath, "FXAA", "on") ? 1 : 0, iniOn(iniPath, "SSAO", "on") ? 1 : 0,
-            iniFloat(iniPath, "SSAOStrength", 0.6f, 0.0f, 1.0f), iniFloat(iniPath, "SSAORadius", 1.0f, 0.25f, 4.0f));
+            iniFloat(iniPath, "SSAOStrength", 0.6f, 0.0f, 1.0f), iniFloat(iniPath, "SSAORadius", 1.0f, 0.25f, 4.0f),
+            iniFloat(iniPath, "DOFStrength", 0.3f, 0.0f, 1.0f));
         // rewrite only on change (keeps the file date stable)
         char old[512] = "";
         FILE* f = nullptr;
         if (fopen_s(&f, path.c_str(), "rb") == 0 && f) { size_t n = fread(old, 1, sizeof(old) - 1, f); old[n] = 0; fclose(f); }
         if (strcmp(old, text) == 0) return;
         if (fopen_s(&f, path.c_str(), "wb") == 0 && f) { fputs(text, f); fclose(f); logf("shader settings written: %s", path.c_str()); }
-        else logf("cannot write %s", path.c_str());
+        else { logf("cannot write %s", path.c_str()); return; }
+        // the game caches compiled shaders by file name (%LOCALAPPDATA%\S2\postprocess.fxPS_*) and would keep the
+        // old settings: drop the cached post-processing shader so it is compiled again with the new include
+        char local[MAX_PATH];
+        DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", local, MAX_PATH);
+        if (!n || n >= MAX_PATH) return;
+        std::string cache = std::string(local) + "\\S2\\";
+        WIN32_FIND_DATAA fd;
+        HANDLE h = FindFirstFileA((cache + "postprocess.fx*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+        do {
+            if (DeleteFileA((cache + fd.cFileName).c_str())) logf("cached shader removed: %s", fd.cFileName);
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
     }
+
+    // The game's post-processing (bloom, depth of field - and the pack's FXAA/SSAO in its combine pass) only runs
+    // with the launch parameter -postFX, which neither GOG nor the shortcuts pass. The parameter only sets a flag in
+    // the graphics settings object (0x6C4A10 + 0x0C, set at 0x405DC4); the game reads it when a map is loaded.
+    static const DWORD SETTINGS_GUARD = 0x006C4A5C, SETTINGS_POSTFX = 0x006C4A1C, SETTINGS_VTABLE = 0x00662688;
+    static int g_postfx = -1;     // -1 = leave as the command line set it
 
     void init(const char* iniPath, const char* logPath) {
         g_debug = logPath != nullptr;
+        {
+            char v[16];
+            GetPrivateProfileStringA("Graphics", "PostFX", "on", v, sizeof(v), iniPath);
+            g_postfx = (_stricmp(v, "on") == 0 || _stricmp(v, "true") == 0 || strcmp(v, "1") == 0) ? 1
+                     : (_stricmp(v, "off") == 0 || _stricmp(v, "false") == 0 || strcmp(v, "0") == 0) ? 0 : -1;
+        }
         if (g_debug) { g_log = logPath; DeleteFileA(logPath); }
         writeShaderSettings(iniPath);
         for (auto& p : g_patches) {
@@ -90,6 +117,14 @@ namespace GfxPatches {
     void onDeviceCreated() {
         if (!g_pending) return;
         g_pending = false;
+        if (g_postfx >= 0) {
+            // settings object constructed (guard bit) and really the graphics settings (vtable)
+            if ((*(volatile DWORD*)SETTINGS_GUARD & 1) && *(volatile DWORD*)(SETTINGS_POSTFX - 0x0C) == SETTINGS_VTABLE) {
+                BYTE before = *(volatile BYTE*)SETTINGS_POSTFX;
+                *(volatile BYTE*)SETTINGS_POSTFX = (BYTE)g_postfx;
+                logf("post effects (-postFX): %s (was %s)", g_postfx ? "on" : "off", before ? "on" : "off");
+            } else logf("post effects: graphics settings object not found - left unchanged");
+        }
         for (auto& p : g_patches) {
             if (p.scale == 1) continue;
             if (memcmp((void*)p.addr, BASE_BYTES, sizeof(BASE_BYTES)) != 0) {

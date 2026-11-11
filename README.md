@@ -16,9 +16,9 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 📐 | **Shadow resolution** – shadow map 4096² instead of 2048² (8192² optional) | `2` |
 | 💧 | **Reflection resolution** – water reflection 4096×2048 instead of 2048×1024 | `2` |
 | 🌲 | **View distance** – less LOD pop-in when zoomed out | on |
-| ✨ | **Post-processing** – Gaussian bloom, softer depth of field | on |
+| ✨ | **Post-processing** – the game's bloom and depth of field, which normally need the launch parameter `-postFX` (GOG does not pass it), switched on by the DLL; Gaussian blur, adjustable depth-of-field haze (`DOFStrength`, default 0.3) | on |
 | 🔬 | **Supersampling** – 3D scene and interface rendered at 2× the resolution and shrunk: smooth foliage, roof and polygon edges, finer textures; optional MSAA on top (`SupersamplingMSAA`); about 10 % fewer FPS at 3440×1440 on an RX 9070 XT | `off` |
-| 🪚 | **FXAA** – edge smoothing of the 3D scene (the game renders it off-screen, so the patch's MSAA does not reach it) | on |
+| 🪚 | **FXAA** – edge smoothing in the post-processing pass (with post-processing the scene is rendered off-screen, where the patch's MSAA does not reach) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
@@ -45,6 +45,8 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | The player lookup of 21 command types has no range check (`0x454200`); a sender that no longer exists yields player -1 | access before the player table | `GameFixes` – such commands are skipped |
 | The shader compiler `d3dx9_29` fails with `E_OUTOFMEMORY` as soon as its memory lies above 2 GB | with the 4 GB flag the game can no longer build shaders once the lower 2 GB are used up | `LowHeap` – the compiler's allocations (malloc/new/HeapAlloc) go to address space reserved below 2 GB at start; when it is full, the normal allocator is used |
 | Loading a cube map (`0x51F1F0`, e.g. `data\enviroment\cube_0.dds`) is not checked, the texture is used later without a check too | a damaged or unsupported file (e.g. from a mod) or too little memory crashes when a map loads | `GameFixes` – a small neutral replacement texture is used, the map loads |
+| Post-processing (bloom, depth of field) only runs with the launch parameter `-postFX` (`0x405D9A`), which neither GOG nor the shortcuts pass | the game's own post effects – and every shader effect built on them – never run | `PostFX` – the DLL sets the flag itself |
+| Compiled shaders are cached by file name (`%LOCALAPPDATA%\S2`) | changed shader settings have no effect until the cache is cleared | the DLL drops the cached post-processing shader when FXAA/SSAO/DOF settings change |
 | Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
 
 Tested in single player sessions and a short LAN session (2 PCs, same version, including a disconnect): no false triggers, no desync. The error cases of the multiplayer fixes themselves could not be reproduced on purpose. In multiplayer all players should use the same version.
