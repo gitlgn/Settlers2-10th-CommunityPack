@@ -48,6 +48,8 @@ TerrainDetail = 0.5
 ImprovedWater = on
 ; houses, trees, rocks, settlers: the same sky/ground ambient light as the terrain (needs SmoothShadows = on)
 ImprovedObjects = on
+; rim light on settlers and animals (they stand out from the ground): 0.0 = off ... 1.0
+UnitRimLight = 0.5
 ; the game's distance fog: with the extended zoom it turns every object pale when zoomed far out (off = no fog)
 DistanceFog = off
 

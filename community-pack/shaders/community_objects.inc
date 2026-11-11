@@ -20,6 +20,23 @@
 #define CP_SET_UP(_c, _n)
 #endif
 
+// rim light for settlers and animals ([Graphics] UnitRimLight = strength 0.0 - 1.0): a soft highlight on the edges
+// that turn away from the camera, so small figures stand out from the ground when seen from above
+#ifndef CP_UNIT_RIM
+#define CP_UNIT_RIM 0.0
+#endif
+
+float3 CP_UnitRim(float3 N, float3 V)		// per pixel: N, V normalised
+{
+	float r = 1.0 - saturate(dot(N, V));
+	return (CP_UNIT_RIM * r * r * r) * float3(0.95, 0.97, 1.0);
+}
+
+float3 CP_UnitRimVS(float3 N, float3 worldPos)	// per vertex (animals, donkeys)
+{
+	return CP_UnitRim(normalize(N), normalize(g_CameraPosition.xyz - worldPos));
+}
+
 // up: 1 = facing up, 0.5 = vertical wall, 0 = facing down
 float3 CP_ObjectAmbient(float up)
 {

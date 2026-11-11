@@ -221,6 +221,17 @@ function Add-ObjectLighting([string]$t) {
         ('$1' + "`r`n`tCP_SET_UP( OUT.color, " + '$2' + " );`t// community pack"))
 }
 
+# rim light for settlers (per pixel) and animals / donkeys (per vertex), [Graphics] UnitRimLight
+function Add-UnitRim([string]$name, [string]$t) {
+    if ($name -eq "skin_color_mesh.fx") {
+        return Replace-Regex1 $t '(Color\.rgb\s*=\s*saturate\( Color\.rgb \+ S \* IdxMap\.b\);)' ('$1' + "`r`n`tColor.rgb`t`t`t= saturate( Color.rgb + CP_UnitRim( N, V ) );`t// community pack") "settler rim light"
+    }
+    if ($name -eq "animals.fx" -or $name -eq "donkey.fx") {
+        return Replace-Regex1 $t '(CP_SET_UP\( OUT\.color, N \);[^\r\n]*)' ('$1' + "`r`n`tOUT.color.rgb`t+= CP_UnitRimVS( N, position.xyz );`t// community pack") "animal rim light"
+    }
+    return $t
+}
+
 function Reset-Pack([string]$pack) {
     $p = Join-Path $Mods $pack
     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
@@ -316,6 +327,7 @@ foreach ($f in Get-ChildItem (Join-Path $Data "gfx\fx_20") -Filter *.fx) {
     $t = [regex]::Replace($t, '(#include\s+"shared.inc")', "#define SMOOTH_SHADOW8`r`n`$1")
     $t = $t.Replace("compile ps_2_0", "compile ps_2_b")
     $t = Add-ObjectLighting $t
+    $t = Add-UnitRim $f.Name $t
     if ($f.Name -eq "terrain_shader.fx") { $t = Add-TerrainImprovements $t }
     if ($f.Name -eq "water_shader.fx") { $t = Add-WaterImprovements $t }
     Write-PackFile "smooth_shadows" ("gfx\fx_20\" + $f.Name) $t
