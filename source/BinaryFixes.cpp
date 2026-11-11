@@ -6,6 +6,7 @@
 #include <climits>
 #include <string>
 
+#include "FixDecisions.h"
 #include "NetTrace.h"
 
 namespace BinaryFixes {
@@ -74,11 +75,10 @@ namespace BinaryFixes {
 
     static void __cdecl clampStringLength(MemStream* s) {
         __try {
-            if (!s || !s->data || s->pos < 0 || s->pos + 2 > s->len) return;   // original reads length 0 then
-            short* p = (short*)(s->data + s->pos);
-            int rest = s->len - s->pos - 2;
-            if (*p < 0) { *p = 0; InterlockedIncrement(&g_clamped); }
-            else if (*p > rest) { *p = (short)rest; InterlockedIncrement(&g_clamped); }
+            if (!s || !s->data) return;
+            // the decision itself lives in FixDecisions (shared with the headless tests)
+            if (FixDecisions::clampStringRead(s->data, s->len, s->pos, nullptr))
+                InterlockedIncrement(&g_clamped);
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
@@ -325,10 +325,9 @@ namespace BinaryFixes {
     static const BYTE TFTP_BYTES[] = { 0xE9, 0x2D, 0x6A, 0x2B, 0x00 };   // jmp 0x6E1CE2
     static const DWORD TFTP_REAL = 0x006E1CE2;
     static std::string g_docs;                                         // "<documents>\" lower case
-    static volatile LONG g_tftpBlocked = 0;
+    static long g_tftpBlocked = 0;
 
-    struct GameString { DWORD alloc; union { char buf[16]; char* ptr; } u; DWORD size; DWORD cap; };
-    static char* gsData(GameString* s) { return s->cap >= 16 ? s->u.ptr : s->u.buf; }
+    using GameString = FixDecisions::GameString;
 
     static std::string documentsFolder() {
         char raw[MAX_PATH] = "", path[MAX_PATH] = "";
@@ -344,28 +343,23 @@ namespace BinaryFixes {
         return std::string();
     }
 
-    static void checkTransferPathInner(GameString* s) {
-        {
-            if (!s || g_docs.empty() || s->size == 0 || s->size > 4096) return;
-            char* d = gsData(s);
-            std::string p(d, s->size);
-            std::string low = p;
-            for (auto& c : low) { c = (char)tolower((unsigned char)c); if (c == '/') c = '\\'; }
-            if (low.compare(0, g_docs.size(), g_docs) != 0) return;     // local path of the game itself
-            std::string rest = low.substr(g_docs.size());
-            bool bad = rest.find("..") != std::string::npos || rest.find(':') != std::string::npos ||
-                       (!rest.empty() && rest[0] == '\\');
-            logf(bad ? "file transfer request BLOCKED: %s" : "file transfer request: %s", p.c_str());
-            if (bad) {
-                InterlockedIncrement(&g_tftpBlocked);
-                d[0] = 0;
-                s->size = 0;
-            }
-        }
-    }
-
     static void __cdecl checkTransferPath(GameString* s) {
-        __try { checkTransferPathInner(s); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        // the request path is snapshotted before the SEH: C++ objects (std::string) may not be
+        // destroyed inside __try (C2712) and the decision below rewrites the string in place
+        char logPath[4160];
+        if (s && g_docs.size() && s->size && s->size <= 4096) {
+            memcpy(logPath, FixDecisions::gsData(s), s->size);
+            logPath[s->size] = 0;
+        }
+        __try {
+            // decision in FixDecisions (shared with the headless tests): a hostile request is
+            // emptied in place there, which the game's own empty-guard turns into FILENOTFOUND
+            if (!s || g_docs.empty() || s->size == 0 || s->size > 4096) return;
+            if (FixDecisions::checkTransferPath(s, g_docs, &g_tftpBlocked))
+                logf("file transfer request BLOCKED: %s", logPath);
+            else
+                logf("file transfer request: %s", logPath);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
     static void __declspec(naked) tftpHook() {
