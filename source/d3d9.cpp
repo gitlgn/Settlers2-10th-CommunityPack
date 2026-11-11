@@ -14,6 +14,8 @@
 #include "CrashDiag.h"
 #include "LAAStress.h"
 #include "LowHeap.h"
+#include "RDTrigger.h"
+#include "SceneSS.h"
 #include "GameGuard.h"
 #include "TimeFix.h"
 #include "SafeSave.h"
@@ -37,6 +39,9 @@ float fFPSLimit;
 HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRect, HWND hDestWindowOverride, CONST RGNDATA *pDirtyRegion)
 {
     NetTrace::onPresent();
+    SceneSS::beforePresent(f_pD3DDevice);
+    RDTrigger::onPresent();
+    SceneSS::onPresent();
 
     if (bFPSLimit)
     {
@@ -129,6 +134,7 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
     // NOTE: initialize your custom D3D components here
     if (SUCCEEDED(hr)) {
         UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
+        SceneSS::onDeviceReady(*ppReturnedDeviceInterface);
         GfxPatches::onDeviceCreated();
         GameGuard::onDeviceCreated();
         TimeFix::onDeviceCreated();
@@ -148,7 +154,9 @@ HRESULT f_IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters
 
     // NOTE: call onLostDevice for custom D3D components here.
 
+    SceneSS::release();
     HRESULT hr = f_pD3DDevice->Reset(pPresentationParameters);
+    if (SUCCEEDED(hr)) SceneSS::onDeviceReady(f_pD3DDevice);
 
     // NOTE: call onResetDevice for custom D3D components here.
 
@@ -329,6 +337,8 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             NetTrace::init(settings->gameVersion == V_BASE_GOG, logPath("\\bin\\nettrace.log", netLog));
             char fixLog[MAX_PATH];
             BinaryFixes::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\gamefixes.log", fixLog), debug);
+            char ssLog[MAX_PATH];
+            SceneSS::init(configPath, logPath("\\bin\\d3dtrace.log", ssLog));
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];
@@ -652,7 +662,9 @@ HRESULT f_IDirect3DDevice9::CreateCubeTexture(THIS_ UINT EdgeLength, UINT Levels
 
 HRESULT f_IDirect3DDevice9::CreateDepthStencilSurface(THIS_ UINT Width, UINT Height, D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Discard, IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateDepthStencilSurface(Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateDepthStencilSurface(Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle);
+    if (SUCCEEDED(hr) && ppSurface) SceneSS::onCreate("CreateDepthStencilSurface", Width, Height, D3DUSAGE_DEPTHSTENCIL, Format, *ppSurface);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::CreateIndexBuffer(THIS_ UINT Length, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DIndexBuffer9** ppIndexBuffer, HANDLE* pSharedHandle)
@@ -662,7 +674,9 @@ HRESULT f_IDirect3DDevice9::CreateIndexBuffer(THIS_ UINT Length, DWORD Usage, D3
 
 HRESULT f_IDirect3DDevice9::CreateRenderTarget(THIS_ UINT Width, UINT Height, D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Lockable, IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
 {
-    return f_pD3DDevice->CreateRenderTarget(Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
+    HRESULT hr = f_pD3DDevice->CreateRenderTarget(Width, Height, Format, MultiSample, MultisampleQuality, Lockable, ppSurface, pSharedHandle);
+    if (SUCCEEDED(hr) && ppSurface) SceneSS::onCreate("CreateRenderTarget", Width, Height, D3DUSAGE_RENDERTARGET, Format, *ppSurface);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::CreateTexture(THIS_ UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9** ppTexture, HANDLE* pSharedHandle)
@@ -670,6 +684,7 @@ HRESULT f_IDirect3DDevice9::CreateTexture(THIS_ UINT Width, UINT Height, UINT Le
     HRESULT hr = f_pD3DDevice->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
     if (SUCCEEDED(hr) && ppTexture) {
         GfxPatches::onCreateTexture(Width, Height, Usage, Format, *ppTexture);
+        SceneSS::onCreate("CreateTexture", Width, Height, Usage, Format, *ppTexture);
         UIScale::onCreateTexture(Width, Height, Usage, Pool, *ppTexture);
     }
     return hr;
@@ -721,7 +736,9 @@ HRESULT f_IDirect3DDevice9::GetRenderState(D3DRENDERSTATETYPE State, DWORD *pVal
 
 HRESULT f_IDirect3DDevice9::GetRenderTarget(THIS_ DWORD RenderTargetIndex, IDirect3DSurface9** ppRenderTarget)
 {
-    return f_pD3DDevice->GetRenderTarget(RenderTargetIndex, ppRenderTarget);
+    HRESULT hr = f_pD3DDevice->GetRenderTarget(RenderTargetIndex, ppRenderTarget);
+    if (SUCCEEDED(hr) && ppRenderTarget) SceneSS::onGetRenderTarget(RenderTargetIndex, *ppRenderTarget);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::GetTransform(D3DTRANSFORMSTATETYPE State, D3DMATRIX *pMatrix)
@@ -741,6 +758,8 @@ HRESULT f_IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE State, DWORD Value
 
 HRESULT f_IDirect3DDevice9::SetRenderTarget(THIS_ DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget)
 {
+    pRenderTarget = SceneSS::renderTarget(RenderTargetIndex, pRenderTarget);
+    SceneSS::onSetRenderTarget(RenderTargetIndex, pRenderTarget);
     return f_pD3DDevice->SetRenderTarget(RenderTargetIndex, pRenderTarget);
 }
 
@@ -965,6 +984,7 @@ HRESULT f_IDirect3DDevice9::SetPixelShader(THIS_ IDirect3DPixelShader9* pShader)
 HRESULT f_IDirect3DDevice9::DrawIndexedPrimitive(THIS_ D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinVertexIndex, UINT NumVertices, UINT startIndex, UINT primCount)
 {
     bool hud = UIScale::begin(f_pD3DDevice, { nullptr, 0, (UINT)(BaseVertexIndex + (INT)MinVertexIndex), NumVertices });
+    SceneSS::onDraw();
     HRESULT hr = f_pD3DDevice->DrawIndexedPrimitive(Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
     if (hud) UIScale::end(f_pD3DDevice);
     return hr;
@@ -973,6 +993,7 @@ HRESULT f_IDirect3DDevice9::DrawIndexedPrimitive(THIS_ D3DPRIMITIVETYPE Type, IN
 HRESULT f_IDirect3DDevice9::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT MinIndex, UINT NumVertices, UINT PrimitiveCount, CONST void *pIndexData, D3DFORMAT IndexDataFormat, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
     bool hud = UIScale::begin(f_pD3DDevice, { pVertexStreamZeroData, VertexStreamZeroStride, MinIndex, NumVertices });
+    SceneSS::onDraw();
     HRESULT hr = f_pD3DDevice->DrawIndexedPrimitiveUP(PrimitiveType, MinIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
     if (hud) UIScale::end(f_pD3DDevice);
     return hr;
@@ -981,6 +1002,7 @@ HRESULT f_IDirect3DDevice9::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveTyp
 HRESULT f_IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount)
 {
     bool hud = UIScale::begin(f_pD3DDevice, { nullptr, 0, StartVertex, UIScale::vertexCount(PrimitiveType, PrimitiveCount) });
+    SceneSS::onDraw();
     HRESULT hr = f_pD3DDevice->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
     if (hud) UIScale::end(f_pD3DDevice);
     return hr;
@@ -989,6 +1011,7 @@ HRESULT f_IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT S
 HRESULT f_IDirect3DDevice9::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void *pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
     bool hud = UIScale::begin(f_pD3DDevice, { pVertexStreamZeroData, VertexStreamZeroStride, 0, UIScale::vertexCount(PrimitiveType, PrimitiveCount) });
+    SceneSS::onDraw();
     HRESULT hr = f_pD3DDevice->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
     if (hud) UIScale::end(f_pD3DDevice);
     return hr;
@@ -1033,6 +1056,7 @@ HRESULT f_IDirect3DDevice9::GetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTA
 HRESULT f_IDirect3DDevice9::SetTexture(DWORD Stage, IDirect3DBaseTexture9 *pTexture)
 {
     GfxPatches::onSetTexture(Stage, pTexture);
+    SceneSS::onSetTexture(Stage, pTexture);
     UIScale::trackTexture(Stage, pTexture);
     return f_pD3DDevice->SetTexture(Stage, pTexture);
 }
@@ -1064,17 +1088,22 @@ HRESULT f_IDirect3DDevice9::SetClipPlane(DWORD Index, CONST float *pPlane)
 
 HRESULT f_IDirect3DDevice9::Clear(DWORD Count, CONST D3DRECT *pRects, DWORD Flags, D3DCOLOR Color, float Z, DWORD Stencil)
 {
-    return f_pD3DDevice->Clear(Count, pRects, Flags, Color, Z, Stencil);
+    SceneSS::onClear(Count, Flags);
+    return f_pD3DDevice->Clear(Count, SceneSS::clearRects(Count, pRects), Flags, Color, Z, Stencil);
 }
 
 HRESULT f_IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *pViewport)
 {
-    return f_pD3DDevice->GetViewport(pViewport);
+    HRESULT hr = f_pD3DDevice->GetViewport(pViewport);
+    if (SUCCEEDED(hr)) SceneSS::viewportToGame(pViewport);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::SetViewport(CONST D3DVIEWPORT9 *pViewport)
 {
-    return f_pD3DDevice->SetViewport(pViewport);
+    SceneSS::onSetViewport(pViewport);
+    D3DVIEWPORT9 vp;
+    return f_pD3DDevice->SetViewport(SceneSS::viewport(pViewport, vp));
 }
 
 HRESULT f_IDirect3DDevice9::CreateVertexShader(THIS_ CONST DWORD* pFunction, IDirect3DVertexShader9** ppShader)
@@ -1230,7 +1259,8 @@ HRESULT f_IDirect3DDevice9::SetSoftwareVertexProcessing(THIS_ BOOL bSoftware)
 
 HRESULT f_IDirect3DDevice9::SetScissorRect(THIS_ CONST RECT* pRect)
 {
-    return f_pD3DDevice->SetScissorRect(pRect);
+    RECT r;
+    return f_pD3DDevice->SetScissorRect(SceneSS::rect(pRect, r));
 }
 
 HRESULT f_IDirect3DDevice9::GetScissorRect(THIS_ RECT* pRect)
@@ -1293,6 +1323,8 @@ HRESULT f_IDirect3DDevice9::SetSamplerState(THIS_ DWORD Sampler, D3DSAMPLERSTATE
 
 HRESULT f_IDirect3DDevice9::SetDepthStencilSurface(THIS_ IDirect3DSurface9* pNewZStencil)
 {
+    pNewZStencil = SceneSS::depthStencil(pNewZStencil);
+    SceneSS::onSetDepthStencil(pNewZStencil);
     return f_pD3DDevice->SetDepthStencilSurface(pNewZStencil);
 }
 
@@ -1308,6 +1340,7 @@ HRESULT f_IDirect3DDevice9::ColorFill(THIS_ IDirect3DSurface9* pSurface, CONST R
 
 HRESULT f_IDirect3DDevice9::StretchRect(THIS_ IDirect3DSurface9* pSourceSurface, CONST RECT* pSourceRect, IDirect3DSurface9* pDestSurface, CONST RECT* pDestRect, D3DTEXTUREFILTERTYPE Filter)
 {
+    SceneSS::onStretchRect(pSourceSurface, pSourceRect, pDestSurface, pDestRect);
     return f_pD3DDevice->StretchRect(pSourceSurface, pSourceRect, pDestSurface, pDestRect, Filter);
 }
 

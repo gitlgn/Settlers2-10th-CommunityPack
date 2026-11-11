@@ -19,6 +19,8 @@ add_library(${PROJECT_NAME} SHARED
 	CrashDiag.cpp
 	LAAStress.cpp
 	LowHeap.cpp
+	RDTrigger.cpp
+	SceneSS.cpp
 	GameGuard.cpp
 	TimeFix.cpp
 	SafeSave.cpp

@@ -35,6 +35,9 @@ namespace UIScale {
 
     // real and virtual HUD size
     static volatile LONG g_realW = 0, g_realH = 0, g_virtW = 0, g_virtH = 0;
+    // supersampling ([Graphics] Supersampling): the back buffer is g_ss times the game's resolution
+    // (g_gameW x g_gameH, what the game believes the screen is); g_realW/H are the back buffer pixels
+    static volatile LONG g_ss = 1, g_gameW = 0, g_gameH = 0;
 
     // device state tracking
     static IDirect3DVertexDeclaration9* g_curDecl = nullptr;
@@ -63,6 +66,17 @@ namespace UIScale {
 
     bool enabled() { return g_on; }
 
+    static void __stdcall applySize(const int* wh);
+
+    int supersample() { return g_on ? (int)g_ss : 1; }
+
+    void setSupersample(int f) {
+        if (f < 1) f = 1;
+        InterlockedExchange(&g_ss, f);
+        if (g_gameW) { int wh[2] = { (int)g_gameW, (int)g_gameH }; applySize(wh); }
+        logf("supersampling factor %d", f);
+    }
+
     // ---------------- virtual HUD size ----------------
 
     static void __stdcall applySize(const int* wh) {
@@ -76,13 +90,15 @@ namespace UIScale {
         int vh = (int)(h / s + 0.5f);
         if (vw > w) vw = w;
         if (vh > h) vh = h;
-        InterlockedExchange(&g_realW, w);
-        InterlockedExchange(&g_realH, h);
+        InterlockedExchange(&g_gameW, w);
+        InterlockedExchange(&g_gameH, h);
+        InterlockedExchange(&g_realW, w * g_ss);
+        InterlockedExchange(&g_realH, h * g_ss);
         InterlockedExchange(&g_virtW, vw);
         InterlockedExchange(&g_virtH, vh);
         *UI_WIDTH = vw;
         *UI_HEIGHT = vh;
-        logf("HUD size: real %dx%d -> virtual %dx%d", w, h, vw, vh);
+        logf("HUD size: game %dx%d (back buffer x%ld) -> virtual %dx%d", w, h, g_ss, vw, vh);
     }
 
     // jumped to from 004F4D3C, eax = pointer to {width, height}; finishes the original function (ret)
@@ -252,6 +268,12 @@ namespace UIScale {
         g_scale = (float)atof(v);
         g_scaleOn = g_scale > 1.01f && g_scale <= 3.0f;
         if (!g_scaleOn) g_scale = 1.0f;
+        // supersampling needs the HUD hooks even without HUD scaling (all pre-transformed draws are rescaled)
+        GetPrivateProfileStringA("Graphics", "Supersampling", "off", v, sizeof(v), iniPath);
+        if (_stricmp(v, "on") == 0 || _stricmp(v, "true") == 0 || strcmp(v, "1") == 0 || strcmp(v, "2") == 0) {
+            g_ss = 2;
+            g_scaleOn = true;
+        }
         GetPrivateProfileStringA("UI", "Filter", "linear", v, sizeof(v), iniPath);
         g_linear = _stricmp(v, "point") != 0;
 
@@ -277,10 +299,11 @@ namespace UIScale {
 
     // cam = the camera object (this); its D3DVIEWPORT9 is at +0xD8 (Width +0xE0, Height +0xE4)
     static void __cdecl projectToVirtual(float* out, const BYTE* cam) {
-        LONG vw = g_virtW, vh = g_virtH, rw = g_realW, rh = g_realH;
+        LONG vw = g_virtW, vh = g_virtH, rw = g_gameW, rh = g_gameH;
         if (!vw || !vh || !cam) return;
         // only projections onto the screen; other viewports (render targets) keep their own pixels
         DWORD w = *(const DWORD*)(cam + 0xE0), h = *(const DWORD*)(cam + 0xE4);
+        if (((LONG)w != rw || (LONG)h != rh) && (LONG)w == g_realW && (LONG)h == g_realH) { rw = g_realW; rh = g_realH; }
         if ((LONG)w != rw || (LONG)h != rh) {
             static LONG logged = 0;
             if (InterlockedExchange(&logged, 1) == 0) logf("projection with viewport %lux%lu (screen %ldx%ld) left unscaled", w, h, rw, rh);
@@ -499,7 +522,7 @@ namespace UIScale {
         // off-screen windows) stay virtual and are simply clipped.
         float px = sx(), py = sy();
         if (g_scaleOn && bd.valid && (bd.maxX > g_virtW + 2.0f || bd.maxY > g_virtH + 2.0f) &&
-            (fabsf(bd.maxX - (float)g_realW) <= 2.0f || fabsf(bd.maxY - (float)g_realH) <= 2.0f)) { px = 1.0f; py = 1.0f; }
+            (fabsf(bd.maxX - (float)g_gameW) <= 2.0f || fabsf(bd.maxY - (float)g_gameH) <= 2.0f)) { px = (float)g_ss; py = (float)g_ss; }
         if (!g_log.empty()) {
             // debug: one line per distinct HUD element (texture, layout, extent)
             static std::map<std::string, bool> seen;
@@ -507,7 +530,7 @@ namespace UIScale {
             _snprintf_s(key, sizeof(key), _TRUNCATE, "%p/%d/%d/%d", g_curTex0, r.variant, (int)(bd.maxX / 16), (int)(bd.maxY / 16));
             if (seen.emplace(key, true).second && seen.size() < 2000)
                 logf("draw tex=%p hd=%d layout=%d n=%u max=(%.0f,%.0f) uv=%.3f -> %s", g_curTex0, isHD ? 1 : 0, r.variant,
-                    range.count, bd.maxX, bd.maxY, bd.maxUV, (px == 1.0f && py == 1.0f) ? "real pixels" : "virtual");
+                    range.count, bd.maxX, bd.maxY, bd.maxUV, (px == (float)g_ss && py == (float)g_ss) ? "game pixels" : "virtual");
         }
         if (!isHD && px == 1.0f && py == 1.0f) return false;   // nothing to change for this draw
 

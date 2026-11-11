@@ -9,6 +9,9 @@ namespace UIScale {
     void init(const char* iniPath, const char* logPath);   // DllMain: read config, patch the size setter
     void onDeviceCreated(IDirect3DDevice9* dev, HWND hwnd);  // after CreateDevice
     bool enabled();
+    // supersampling: back buffer = factor x the game's resolution; every pre-transformed draw is rescaled
+    int supersample();                 // active factor (1 = off or HUD hooks unavailable)
+    void setSupersample(int factor);   // e.g. back to 1 when the device cannot use the larger back buffer
 
     // device wrapper hooks
     void trackDecl(IDirect3DVertexDeclaration9* decl);

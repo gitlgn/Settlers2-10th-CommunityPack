@@ -21,6 +21,8 @@ Scale = 1.5
 Filter = linear
 
 [Graphics]
+; supersampling: scene and interface are rendered at 2x the resolution and shrunk (much smoother edges, 4x GPU load; windowed mode)
+Supersampling = off
 ; shadow map resolution at the highest shadow setting: 1 = original 2048x2048, 2 = 4096x4096, 4 = 8192x8192 (GOG build 11757 only)
 ShadowMapScale = 2
 ; water reflection resolution at the highest setting: 1 = original 2048x1024, 2 = 4096x2048, 4 = 8192x4096 (GOG build 11757 only)
