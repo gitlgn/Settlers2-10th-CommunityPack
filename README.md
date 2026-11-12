@@ -9,6 +9,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | | Optimisation | Default |
 |---|---|---|
 | ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
+| ⏩ | **Skip intro** – no logo videos and no intro film at startup, straight to the main menu (`[Misc] SkipIntro`) | off |
 | 🖥️ | **HUD scaling** – interface, dialogs, fonts and minimap scaled for 1440p / 4K / ultrawide; mouse input matches automatically | `Scale = 1.5` |
 | 🔍 | **HD interface** – all interface textures, menu logo and fonts upscaled 2× with Real-ESRGAN | on |
 | 🌍 | **HD world textures** – 4K remakes from [S2-modders](https://github.com/S2-modders/Settlers-II-remakes-4k-textures-dds) | on |

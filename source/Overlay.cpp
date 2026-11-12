@@ -72,6 +72,8 @@ namespace Overlay {
         { "Packs", "Mods", "ImprovedPostFX", T_BOOL, "on", 0, 0, nullptr, "Softer post-processing", "Gaussian blur; needed for FXAA/SSAO.", false },
 
         { "Interface", "UI", "Scale", T_FLOAT, "1.5", 1, 3, nullptr, "HUD scale", "1.0 = off (original size).", false },
+        { "Interface", "Misc", "SkipIntro", T_BOOL, "off", 0, 0, nullptr, "Skip intro videos",
+          "No logo videos and no intro film: straight to the main menu.", false },
         { "Interface", "UI", "Filter", T_CHOICE, "linear", 0, 0, "linear|point", "HUD filter", "linear = smooth, point = crisp pixels.", false },
 
         { "Fixes", "Misc", "GameFixes", T_BOOL, "on", 0, 0, nullptr, "Game bug fixes",

@@ -68,3 +68,5 @@ SafeSave = on
 GameFixes = on
 ; 4 GB memory: keeps memory below 2 GB for the game's shader compiler, which fails above 2 GB (only active with the 4 GB flag)
 LowHeap = on
+; skip all startup videos (logos and intro film): straight to the main menu
+SkipIntro = off

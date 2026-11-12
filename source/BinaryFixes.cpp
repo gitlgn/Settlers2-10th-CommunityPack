@@ -383,6 +383,11 @@ namespace BinaryFixes {
     static const BYTE INTRO_BYTES[] = { 0x8B, 0x86, 0xC8, 0x0B, 0x00, 0x00 };   // mov eax, [esi+0BC8h]
     static const BYTE INTRO_SKIP[] = { 0xB8, 0x03, 0x00, 0x00, 0x00, 0x90 };    // mov eax, 3
     static bool g_skipIntro = false;
+    // the first video is started at 0x4CA292 (push 7 / push "Ubisoft"); a name of a video that does not exist makes
+    // the player report "finished" right away, so with the step counter above the game goes straight to the menu
+    static const DWORD UBI_AT = 0x004CA292;
+    static const BYTE UBI_BYTES[] = { 0x6A, 0x07, 0x68, 0x44, 0xD6, 0x65, 0x00 };   // push 7; push 65D644h ("Ubisoft")
+    static const char NO_VIDEO[] = "novideo";
     static bool write(DWORD addr, const BYTE* bytes, int len);
 
     void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace) {
@@ -676,7 +681,12 @@ namespace BinaryFixes {
         g_pending = false;
         if (g_skipIntro) {
             bool ok = memcmp((void*)INTRO_AT, INTRO_BYTES, sizeof(INTRO_BYTES)) == 0 && write(INTRO_AT, INTRO_SKIP, sizeof(INTRO_SKIP));
-            logf(ok ? "applied: %s" : "skipped (code differs): %s", "skip intro videos (only the Ubisoft logo, 0x4CA441)");
+            logf(ok ? "applied: %s" : "skipped (code differs): %s", "skip intro videos: step counter (0x4CA441)");
+            if (ok && memcmp((void*)UBI_AT, UBI_BYTES, sizeof(UBI_BYTES)) == 0) {
+                BYTE p[7] = { 0x6A, 0x07, 0x68, 0, 0, 0, 0 };
+                *(DWORD*)(p + 3) = (DWORD)NO_VIDEO;
+                logf(write(UBI_AT, p, sizeof(p)) ? "applied: %s" : "failed: %s", "skip intro videos: no Ubisoft logo (0x4CA292)");
+            }
         }
         g_checkPlayers = g_fixes;
         bool hooked = hookDispatcher();
