@@ -425,6 +425,122 @@ namespace BinaryFixes {
         return std::string();
     }
 
+    // ---- damaged game file (NBase::gDecryptData, 0x593C20): on an integrity error of an encrypted game file (FCC,
+    // password CRC, data size, data CRC) the game writes to address 0 on purpose - a crash without explanation,
+    // typical for a damaged or wrongly packed mod file. The game has just logged the file name to
+    // Documents\S2\dumps\Logfile_*.txt; the four crash sites now show that name and end the game cleanly.
+    static const DWORD DECRYPT_FAIL[] = { 0x00593C8B, 0x00593CFC, 0x00593D75, 0x00593DDE };
+    static const BYTE DECRYPT_FAIL_BYTES[] = { 0xC6, 0x05, 0x00, 0x00, 0x00, 0x00, 0x0C };   // mov byte ptr [0], 0Ch
+
+    // file name of the file being decrypted: the entry of gDecryptData stores its first parameter (a game std::string)
+    static const DWORD DECRYPT_AT = 0x00593C20;
+    static const BYTE DECRYPT_ENTRY[] = { 0x83, 0xEC, 0x24, 0xA1, 0xF0, 0x9D, 0x6B, 0x00 };   // sub esp,24h; mov eax,[6B9DF0h]
+    static volatile DWORD g_decryptName = 0;
+
+    static void readDecryptName(char* buf, size_t cap) {
+        buf[0] = 0;
+        __try {
+            const BYTE* gs = (const BYTE*)g_decryptName;
+            if (gs) {
+                DWORD size = *(const DWORD*)(gs + 0x14), c = *(const DWORD*)(gs + 0x18);
+                const char* d = c >= 16 ? *(const char* const*)(gs + 4) : (const char*)(gs + 4);
+                if (size >= cap) size = (DWORD)cap - 1;
+                memcpy(buf, d, size);
+                buf[size] = 0;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { buf[0] = 0; }
+    }
+
+    static std::string currentDecryptName() {
+        char buf[300];
+        readDecryptName(buf, sizeof(buf));
+        return buf;
+    }
+
+    static bool applyDecryptNameHook() {
+        if (memcmp((void*)DECRYPT_AT, DECRYPT_ENTRY, sizeof(DECRYPT_ENTRY)) != 0) return false;
+        BYTE* t = (BYTE*)VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!t) return false;
+        BYTE code[] = {
+            0x8B, 0x44, 0x24, 0x04,                 // mov eax, [esp+4]      (file name string)
+            0xA3, 0, 0, 0, 0,                       // mov [g_decryptName], eax
+            0x83, 0xEC, 0x24,                       // sub esp, 24h          (original)
+            0xA1, 0xF0, 0x9D, 0x6B, 0x00,           // mov eax, [6B9DF0h]    (original)
+            0xE9, 0, 0, 0, 0,                       // jmp 593C28h
+        };
+        *(DWORD*)(code + 5) = (DWORD)&g_decryptName;
+        *(DWORD*)(code + 18) = (DECRYPT_AT + 8) - ((DWORD)t + 22);
+        memcpy(t, code, sizeof(code));
+        BYTE jmp[8] = { 0xE9, 0, 0, 0, 0, 0x90, 0x90, 0x90 };
+        *(DWORD*)(jmp + 1) = (DWORD)t - (DECRYPT_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)DECRYPT_AT, 8, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)DECRYPT_AT, jmp, 8);
+        VirtualProtect((void*)DECRYPT_AT, 8, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)DECRYPT_AT, 8);
+        return true;
+    }
+
+    static std::string damagedFileName() {
+        std::string direct = currentDecryptName();
+        if (!direct.empty()) return direct;
+        std::string dir = documentsFolder();
+        if (dir.empty()) return std::string();
+        dir += "\\S2\\dumps\\";
+        WIN32_FIND_DATAA fd;
+        HANDLE h = FindFirstFileA((dir + "Logfile_*.txt").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return std::string();
+        std::string newest;
+        FILETIME best = {};
+        do {
+            if (CompareFileTime(&fd.ftLastWriteTime, &best) > 0) { best = fd.ftLastWriteTime; newest = fd.cFileName; }
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+        std::string text, line, found;
+        FILE* f = nullptr;
+        if (fopen_s(&f, (dir + newest).c_str(), "rb") != 0 || !f) return std::string();
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, n);
+        fclose(f);
+        size_t p = text.rfind("mismatch");
+        if (p == std::string::npos) return std::string();
+        size_t a = text.rfind("file ", p), b = text.rfind(": ", p);
+        if (a == std::string::npos || b == std::string::npos || b <= a + 5) return std::string();
+        return text.substr(a + 5, b - a - 5);
+    }
+
+    static void __cdecl damagedGameFile() {
+        std::string name = damagedFileName();
+        if (name.empty()) name = "(see Documents\\S2\\dumps\\Logfile_0.txt)";
+        std::string msg =
+            "Eine Spieldatei ist beschaedigt oder falsch gepackt:\n    " + name + "\n\n"
+            "Stammt sie von einem Mod: Mod neu installieren oder entfernen. Sonst die Spieldateien in GOG Galaxy pruefen lassen.\n\n"
+            "A game file is damaged or wrongly packed:\n    " + name + "\n\n"
+            "If it comes from a mod, reinstall or remove the mod; otherwise let GOG Galaxy verify the game files.\n\n"
+            "Das Spiel wird beendet. / The game will close.";
+        HWND w = GetForegroundWindow();
+        ShowWindow(w, SW_MINIMIZE);   // fullscreen: let the message box be seen
+        MessageBoxA(nullptr, msg.c_str(), "Settlers II - Community Pack", MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+        ExitProcess(4);
+    }
+
+    static bool applyDamagedFileMessage() {
+        applyDecryptNameHook();
+        for (DWORD at : DECRYPT_FAIL)
+            if (memcmp((void*)at, DECRYPT_FAIL_BYTES, sizeof(DECRYPT_FAIL_BYTES)) != 0) return false;
+        for (DWORD at : DECRYPT_FAIL) {
+            BYTE call[7] = { 0xE8, 0, 0, 0, 0, 0x90, 0x90 };
+            *(DWORD*)(call + 1) = (DWORD)&damagedGameFile - (at + 5);
+            DWORD old;
+            if (!VirtualProtect((void*)at, 7, PAGE_EXECUTE_READWRITE, &old)) return false;
+            memcpy((void*)at, call, 7);
+            VirtualProtect((void*)at, 7, old, &old);
+            FlushInstructionCache(GetCurrentProcess(), (void*)at, 7);
+        }
+        return true;
+    }
+
     static void __cdecl checkTransferPath(GameString* s) {
         // the request path is snapshotted before the SEH: C++ objects (std::string) may not be
         // destroyed inside __try (C2712) and the decision below rewrites the string in place
@@ -498,5 +614,7 @@ namespace BinaryFixes {
             "multiplayer file transfer: requested names limited to the Documents folder (0x42B2B0)");
         logf(applyCubeTextureCheck() ? "applied: %s" : "skipped (code differs): %s",
             "cube texture: a failed load gets a neutral replacement instead of crashing on a NULL texture (0x51F1F0)");
+        logf(applyDamagedFileMessage() ? "applied: %s" : "skipped (code differs): %s",
+            "damaged game file: message with the file name instead of a deliberate crash (0x593C20)");
     }
 }
