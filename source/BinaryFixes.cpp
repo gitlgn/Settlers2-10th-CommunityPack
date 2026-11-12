@@ -377,6 +377,14 @@ namespace BinaryFixes {
         logf("cube texture could not be loaded (damaged/unsupported file or out of memory): %s", "neutral replacement used");
     }
 
+    // ---- [Misc] SkipIntro: after a startup video ends, 0x4CA441 reads the step counter [esi+0xBC8] (0 -> BB_Logo,
+    // 1 -> funaticsAlpha, 2 -> Intro, 3 -> main menu). Reading 3 instead goes from the Ubisoft logo straight to the menu.
+    static const DWORD INTRO_AT = 0x004CA441;
+    static const BYTE INTRO_BYTES[] = { 0x8B, 0x86, 0xC8, 0x0B, 0x00, 0x00 };   // mov eax, [esi+0BC8h]
+    static const BYTE INTRO_SKIP[] = { 0xB8, 0x03, 0x00, 0x00, 0x00, 0x90 };    // mov eax, 3
+    static bool g_skipIntro = false;
+    static bool write(DWORD addr, const BYTE* bytes, int len);
+
     void init(const char* iniPath, bool supportedExe, const char* logPath, bool trace) {
         g_log = logPath ? logPath : "";
         if (logPath) DeleteFileA(logPath);
@@ -385,7 +393,9 @@ namespace BinaryFixes {
         bool on = _stricmp(v, "off") != 0 && _stricmp(v, "false") != 0 && strcmp(v, "0") != 0;
         g_fixes = supportedExe && on;
         g_trace = supportedExe && trace;
-        g_pending = g_fixes || g_trace;
+        GetPrivateProfileStringA("Misc", "SkipIntro", "off", v, sizeof(v), iniPath);
+        g_skipIntro = supportedExe && (!_stricmp(v, "on") || !_stricmp(v, "true") || !strcmp(v, "1"));
+        g_pending = g_fixes || g_trace || g_skipIntro;
     }
 
     static bool write(DWORD addr, const BYTE* bytes, int len) {
@@ -541,6 +551,82 @@ namespace BinaryFixes {
         return true;
     }
 
+    // ---- damaged unencrypted Granny model (mods ship plain .gr2): granny2.dll parses it without any check and
+    // writes past its buffers. The Granny header carries a CRC-32 of the file from (32 + section array offset) to
+    // TotalSize (verified on game models); the game's import of GrannyReadEntireFileFromMemory is redirected to a
+    // check first. The file name comes from the entry of the game's file loader (0x594810).
+    static const DWORD GRANNY_READ_SLOT = 0x006543CC;
+    static const DWORD FILELOAD_AT = 0x00594810;
+    static const BYTE FILELOAD_ENTRY[] = { 0x53, 0x8B, 0x5C, 0x24, 0x08 };   // push ebx; mov ebx,[esp+8]
+    static volatile DWORD g_loadName = 0;
+    typedef void*(__stdcall* GrannyRead_t)(int, void*);
+    static GrannyRead_t g_grannyRead = nullptr;
+
+    static DWORD crc32(const BYTE* p, size_t n) {
+        static DWORD table[256];
+        static bool init = false;
+        if (!init) {
+            for (DWORD i = 0; i < 256; i++) { DWORD c = i; for (int k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >> 1) : c >> 1; table[i] = c; }
+            init = true;
+        }
+        DWORD c = 0xFFFFFFFF;
+        for (size_t i = 0; i < n; i++) c = table[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+        return c ^ 0xFFFFFFFF;
+    }
+
+    static bool grannyLooksDamaged(int size, const BYTE* m) {
+        static const BYTE magic[16] = { 0xB8, 0x67, 0xB0, 0xCA, 0xF8, 0x6D, 0xB1, 0x0F, 0x84, 0x72, 0x8C, 0x7E, 0x5E, 0x19, 0x00, 0x1E };
+        if (!m || size < 88 || memcmp(m, magic, 16) != 0) return false;   // other Granny variants: not checked
+        DWORD total = *(const DWORD*)(m + 36), crc = *(const DWORD*)(m + 40), secoff = *(const DWORD*)(m + 44);
+        if (crc == 0) return false;                                       // written without CRC
+        if (total > (DWORD)size || secoff > total || 32 + secoff > total) return true;
+        return crc32(m + 32 + secoff, total - 32 - secoff) != crc;
+    }
+
+    static bool grannyCheck(int size, void* mem) {
+        bool bad = false;
+        __try { bad = grannyLooksDamaged(size, (const BYTE*)mem); } __except (EXCEPTION_EXECUTE_HANDLER) { bad = false; }
+        return bad;
+    }
+
+    static void* __stdcall grannyReadChecked(int size, void* mem) {
+        if (grannyCheck(size, mem)) {
+            g_decryptName = g_loadName;          // name for the message (same game string layout)
+            damagedGameFile();
+        }
+        return g_grannyRead(size, mem);
+    }
+
+    static bool applyGrannyCheck() {
+        if (memcmp((void*)FILELOAD_AT, FILELOAD_ENTRY, sizeof(FILELOAD_ENTRY)) != 0) return false;
+        HMODULE gr = GetModuleHandleA("granny2.dll");
+        void* real = gr ? (void*)GetProcAddress(gr, "_GrannyReadEntireFileFromMemory@8") : nullptr;
+        if (!real || *(void**)GRANNY_READ_SLOT != real) return false;
+        BYTE* t = (BYTE*)VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!t) return false;
+        BYTE code[] = {
+            0x8B, 0x44, 0x24, 0x04,                 // mov eax, [esp+4]      (path string)
+            0xA3, 0, 0, 0, 0,                       // mov [g_loadName], eax
+            0x53, 0x8B, 0x5C, 0x24, 0x08,           // original: push ebx; mov ebx,[esp+8]
+            0xE9, 0, 0, 0, 0,                       // jmp 594815h
+        };
+        *(DWORD*)(code + 5) = (DWORD)&g_loadName;
+        *(DWORD*)(code + 15) = (FILELOAD_AT + 5) - ((DWORD)t + 19);
+        memcpy(t, code, sizeof(code));
+        BYTE jmp[5] = { 0xE9 };
+        *(DWORD*)(jmp + 1) = (DWORD)t - (FILELOAD_AT + 5);
+        DWORD old;
+        if (!VirtualProtect((void*)FILELOAD_AT, 5, PAGE_EXECUTE_READWRITE, &old)) return false;
+        memcpy((void*)FILELOAD_AT, jmp, 5);
+        VirtualProtect((void*)FILELOAD_AT, 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void*)FILELOAD_AT, 5);
+        g_grannyRead = (GrannyRead_t)real;
+        if (!VirtualProtect((void*)GRANNY_READ_SLOT, 4, PAGE_READWRITE, &old)) return false;
+        *(void**)GRANNY_READ_SLOT = (void*)grannyReadChecked;
+        VirtualProtect((void*)GRANNY_READ_SLOT, 4, old, &old);
+        return true;
+    }
+
     static void __cdecl checkTransferPath(GameString* s) {
         // the request path is snapshotted before the SEH: C++ objects (std::string) may not be
         // destroyed inside __try (C2712) and the decision below rewrites the string in place
@@ -588,6 +674,10 @@ namespace BinaryFixes {
     void onDeviceCreated() {
         if (!g_pending) return;
         g_pending = false;
+        if (g_skipIntro) {
+            bool ok = memcmp((void*)INTRO_AT, INTRO_BYTES, sizeof(INTRO_BYTES)) == 0 && write(INTRO_AT, INTRO_SKIP, sizeof(INTRO_SKIP));
+            logf(ok ? "applied: %s" : "skipped (code differs): %s", "skip intro videos (only the Ubisoft logo, 0x4CA441)");
+        }
         g_checkPlayers = g_fixes;
         bool hooked = hookDispatcher();
         logf(hooked ? "command dispatcher hooked: %s" : "command dispatcher NOT hooked (code differs): %s",
@@ -616,5 +706,7 @@ namespace BinaryFixes {
             "cube texture: a failed load gets a neutral replacement instead of crashing on a NULL texture (0x51F1F0)");
         logf(applyDamagedFileMessage() ? "applied: %s" : "skipped (code differs): %s",
             "damaged game file: message with the file name instead of a deliberate crash (0x593C20)");
+        logf(applyGrannyCheck() ? "applied: %s" : "skipped (code differs): %s",
+            "unencrypted Granny models: CRC checked before granny2.dll parses them (0x6543CC)");
     }
 }
