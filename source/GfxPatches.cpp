@@ -104,6 +104,7 @@ namespace GfxPatches {
     static int g_postfx = -1;     // -1 = leave as the command line set it
     static bool g_fog = false;
     bool distanceFog() { return g_fog; }
+    void setDistanceFog(bool on) { g_fog = on; }
 
     void init(const char* iniPath, const char* logPath) {
         g_debug = logPath != nullptr;

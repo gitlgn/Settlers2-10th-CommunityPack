@@ -8,6 +8,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 
 | | Optimisation | Default |
 |---|---|---|
+| ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
 | 🖥️ | **HUD scaling** – interface, dialogs, fonts and minimap scaled for 1440p / 4K / ultrawide; mouse input matches automatically | `Scale = 1.5` |
 | 🔍 | **HD interface** – all interface textures, menu logo and fonts upscaled 2× with Real-ESRGAN | on |
 | 🌍 | **HD world textures** – 4K remakes from [S2-modders](https://github.com/S2-modders/Settlers-II-remakes-4k-textures-dds) | on |
@@ -115,6 +116,8 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/GameGuard.*` | profile backup/restore (`Documents\S2\users\backup`), mesh/shader cache guard (`%LOCALAPPDATA%\S2`) |
 | `source/TimeFix.*`, `source/SafeSave.*`, `source/BinaryFixes.*` | fixes for the original game (clocks, atomic saving, byte patches + command dispatcher check) |
 | `source/NetTrace.*` | multiplayer diagnostics (`DebugMode`): received messages, executed commands, mouse clicks → `bin\nettrace.log` |
+| `source/Overlay.*`, `source/third_party/imgui` | in-game settings menu (Dear ImGui; own fixed-function renderer and texture upload – the stock DX9 backend draws nothing / deadlocks under this game + DXVK) |
+| `source/Profiler.*` | `DebugMode` sampling profiler of the render thread (`bin\profile.trigger`) |
 | `source/SceneSS.*` | supersampling (own 2× render target in place of the back buffer), one-frame D3D9 trace for `DebugMode` |
 | `source/LowHeap.*` | keeps the memory of the game's D3DX below 2 GB (4 GB flag) |
 | `source/FixDecisions.*`, `source/tests/` | decision logic of the binary fixes + headless tests (`cmake --build build --target FixTests`) |

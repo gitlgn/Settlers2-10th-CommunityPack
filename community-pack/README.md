@@ -14,6 +14,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 
 | Funktion | Schalter in `bin\d3d9.ini` | Beschreibung |
 |---|---|---|
+| Einstellungsmenü | `[UI] Menu = on`, `MenuKey = F10` | **F10** im Spiel öffnet alle Schalter des Community Packs mit Erklärungen; Änderungen landen in `bin\d3d9.ini`, das Menü zeigt, welche einen Neustart brauchen. Esc oder F10 schließt es. |
 | UI-Skalierung | `[UI] Scale = 1.5` | Oberfläche, Fenster, Schrift und Minimap werden bei hohen Auflösungen vergrößert (z. B. 1.25 / 1.5 / 2.0). Maus und Klicks passen automatisch. Bei kleinen Auflösungen wird automatisch weniger vergrößert (nie unter 640×480). |
 | UI-Filter | `[UI] Filter = linear` | `linear` = glatt, `point` = scharfe Pixel (gut bei `Scale = 2.0`). |
 | HD-Oberfläche | `[Mods] HDInterface` | Alle Oberflächen-Texturen, das Menü-Logo und die Schriften 2× mit Real-ESRGAN hochgerechnet (wird beim Installieren auf deinem PC erzeugt). |
@@ -86,6 +87,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 
 | Feature | Switch in `bin\d3d9.ini` | |
 |---|---|---|
+| Settings menu | `[UI] Menu = on`, `MenuKey = F10` | **F10** in the game opens all Community Pack switches with explanations; changes go to `bin\d3d9.ini`, the menu says which need a restart. Esc or F10 closes it. |
 | HUD scaling | `[UI] Scale = 1.5` | Bigger HUD, dialogs, fonts and minimap on high resolutions; mouse input matches automatically. Reduced automatically on small resolutions (never below 640×480). |
 | HUD filter | `[UI] Filter = linear` | `linear` smooth, `point` crisp pixels (best with `Scale = 2.0`). |
 | HD interface | `[Mods] HDInterface` | All interface textures, the menu logo and the fonts upscaled 2× with Real-ESRGAN (generated on your PC). |

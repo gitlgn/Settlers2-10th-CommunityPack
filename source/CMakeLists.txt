@@ -22,6 +22,12 @@ add_library(${PROJECT_NAME} SHARED
 	RDTrigger.cpp
 	SceneSS.cpp
 	Profiler.cpp
+	Overlay.cpp
+	third_party/imgui/imgui.cpp
+	third_party/imgui/imgui_draw.cpp
+	third_party/imgui/imgui_tables.cpp
+	third_party/imgui/imgui_widgets.cpp
+	third_party/imgui/imgui_impl_dx9.cpp
 	GameGuard.cpp
 	TimeFix.cpp
 	SafeSave.cpp

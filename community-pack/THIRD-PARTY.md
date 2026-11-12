@@ -9,6 +9,7 @@
 | [Settlers-II-remakes-4k-textures-dds](https://github.com/S2-modders/Settlers-II-remakes-4k-textures-dds) (S2-modders) | optional HD textures; LOD values of `LODFix` | no licence stated | **no** – downloaded by the installer from the original repository at your request |
 | [Real-ESRGAN ncnn-vulkan](https://github.com/xinntao/Real-ESRGAN) (Xintao Wang et al.) | optional 2× interface upscaling | BSD-3-Clause | **no** – downloaded from the official release at your request |
 | [DirectXTex texconv](https://github.com/microsoft/DirectXTex) (Microsoft) | optional DDS conversion | MIT | **no** – downloaded from the official release at your request |
+| [Dear ImGui](https://github.com/ocornut/imgui) v1.93.0 (Omar Cornut) | in-game settings menu (F10) | MIT | yes – inside `d3d9.dll`, source and licence in `source/third_party/imgui` (DX9 backend adapted) |
 | DXVK (`d3d9vk.dll`) | Vulkan renderer | zlib | no – part of the Community Patch 2.3 |
 
 Game content (*The Settlers II – 10th Anniversary*, © Ubisoft Entertainment / Blue Byte / Funatics) is **not** included.

@@ -13,4 +13,5 @@ namespace GfxPatches {
     // [Graphics] DistanceFog: the game's fixed-function distance fog (off by default - with the extended zoom it
     // turns every object pale; Shader Model 3 shaders such as the improved terrain never get it anyway)
     bool distanceFog();
+    void setDistanceFog(bool on);   // from the in-game menu (takes effect with the next fog state the game sets)
 }

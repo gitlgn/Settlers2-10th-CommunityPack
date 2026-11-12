@@ -17,6 +17,7 @@
 #include "RDTrigger.h"
 #include "SceneSS.h"
 #include "Profiler.h"
+#include "Overlay.h"
 #include "GameGuard.h"
 #include "TimeFix.h"
 #include "SafeSave.h"
@@ -41,6 +42,7 @@ HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRe
 {
     NetTrace::onPresent();
     SceneSS::beforePresent(f_pD3DDevice);
+    Overlay::onPresent(f_pD3DDevice);
     RDTrigger::onPresent();
     SceneSS::onPresent();
     Profiler::onPresent();
@@ -138,6 +140,7 @@ HRESULT f_iD3D9::CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWi
         UIScale::onDeviceCreated(nullptr, hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
         GfxPatches::onDeviceCreated();
         SceneSS::onDeviceReady(*ppReturnedDeviceInterface);   // after GfxPatches: post effects flag
+        Overlay::onDeviceCreated(*ppReturnedDeviceInterface, pPresentationParameters->hDeviceWindow ? pPresentationParameters->hDeviceWindow : hFocusWindow);
         GameGuard::onDeviceCreated();
         TimeFix::onDeviceCreated();
         SafeSave::onDeviceCreated();
@@ -157,8 +160,9 @@ HRESULT f_IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters
     // NOTE: call onLostDevice for custom D3D components here.
 
     SceneSS::release();
+    Overlay::beforeReset();
     HRESULT hr = f_pD3DDevice->Reset(pPresentationParameters);
-    if (SUCCEEDED(hr)) SceneSS::onDeviceReady(f_pD3DDevice);
+    if (SUCCEEDED(hr)) { SceneSS::onDeviceReady(f_pD3DDevice); Overlay::afterReset(f_pD3DDevice); }
 
     // NOTE: call onResetDevice for custom D3D components here.
 
@@ -343,6 +347,8 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             SceneSS::init(configPath, logPath("\\bin\\d3dtrace.log", ssLog));
             char profLog[MAX_PATH];
             Profiler::init(logPath("\\bin\\profile.log", profLog));
+            char menuLog[MAX_PATH];
+            Overlay::init(configPath, logPath("\\bin\\menu.log", menuLog));
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];

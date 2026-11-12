@@ -19,6 +19,9 @@ ImprovedPostFX = on
 Scale = 1.5
 ; texture filter for the scaled HUD: linear (smooth) or point (sharp, uneven pixels unless Scale is a whole number)
 Filter = linear
+; in-game settings menu (Dear ImGui): on/off and the key that opens it (F1-F24, Insert, Home)
+Menu = on
+MenuKey = F10
 
 [Graphics]
 ; the game's post-processing (bloom, depth of field) - normally only with the launch parameter -postFX; FXAA and SSAO need it
