@@ -21,6 +21,7 @@ add_library(${PROJECT_NAME} SHARED
 	LowHeap.cpp
 	RDTrigger.cpp
 	SceneSS.cpp
+	Profiler.cpp
 	GameGuard.cpp
 	TimeFix.cpp
 	SafeSave.cpp

@@ -16,6 +16,7 @@
 #include "LowHeap.h"
 #include "RDTrigger.h"
 #include "SceneSS.h"
+#include "Profiler.h"
 #include "GameGuard.h"
 #include "TimeFix.h"
 #include "SafeSave.h"
@@ -42,6 +43,7 @@ HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRe
     SceneSS::beforePresent(f_pD3DDevice);
     RDTrigger::onPresent();
     SceneSS::onPresent();
+    Profiler::onPresent();
 
     if (bFPSLimit)
     {
@@ -339,6 +341,8 @@ bool WINAPI DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved) {
             BinaryFixes::init(configPath, settings->gameVersion == V_BASE_GOG, logPath("\\bin\\gamefixes.log", fixLog), debug);
             char ssLog[MAX_PATH];
             SceneSS::init(configPath, logPath("\\bin\\d3dtrace.log", ssLog));
+            char profLog[MAX_PATH];
+            Profiler::init(logPath("\\bin\\profile.log", profLog));
 
             // data packs (HD textures, shaders, ...) must be in place before the game loads any data
             char gameRoot[MAX_PATH];
