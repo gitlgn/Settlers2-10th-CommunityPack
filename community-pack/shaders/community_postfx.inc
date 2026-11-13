@@ -1,25 +1,17 @@
 //
 // Community Pack: anti-aliasing (FXAA) and ambient occlusion (SSAO) for the post-processing combine pass.
-// Settings come from community_settings.inc, written by the patch DLL from [Graphics] in bin\d3d9.ini:
-//   CP_FXAA (0/1), CP_SSAO (0/1), CP_SSAO_STRENGTH, CP_SSAO_RADIUS
+// Live settings (community_live.inc, F10 menu / [Graphics] in bin\d3d9.ini):
+//   CP_FXAA_ON, CP_SSAO_ON (0/1), CP_SSAO_STRENGTH, CP_SSAO_RADIUS, CP_DOF_STRENGTH (used by postprocess.fx)
 //
-// Texture1 = scene colour, Texture2 = linear view depth (R32F/R16F, written by every scene shader).
+// Texture1 = scene colour, Texture2 = linear view depth (R32F, written by the scene shaders, bound by the DLL).
 //
 
-#include "community_settings.inc"
+#include "community_live.inc"
 
-#ifndef CP_FXAA
-#define CP_FXAA 0
-#endif
-#ifndef CP_SSAO
-#define CP_SSAO 0
-#endif
-#ifndef CP_SSAO_STRENGTH
-#define CP_SSAO_STRENGTH 0.6
-#endif
-#ifndef CP_SSAO_RADIUS
-#define CP_SSAO_RADIUS 1.0
-#endif
+// Depth of field: the engine never bound the depth target for this pass, so the original game blurred the whole
+// picture evenly (depth = 0). The DLL binds it now (for SSAO), but alpha-blended objects (flags, particles, decals)
+// blend their depth into it, which gives blurred patches with real depth. The depth of field keeps the even haze.
+#define CP_DOF_DEPTH(_d)	0.0
 
 // size of one scene pixel in texture coordinates (falls back to stage 0 if the engine leaves stage 1 empty)
 float2 CP_PixelSize()
@@ -58,11 +50,15 @@ float3 CP_Fxaa(float2 uv, float2 px)
 	return (lumB < lumMin || lumB > lumMax) ? rgbA : rgbB;
 }
 
-// depth-only SSAO: neighbours that are clearly closer to the camera (but not far in front) darken the pixel
-static const float2 CP_AOKernel[8] =
+// depth-only SSAO (Texture2 = linear view depth, bound by the DLL for this pass).
+// Samples come in pairs mirrored around the pixel: on a flat or sloped surface the two depths average out to the
+// pixel's own depth (no occlusion), in a corner (house wall on the ground, trunk on the terrain) the pair is closer
+// on average. Occluders far in front (a tree over distant ground) fade out. The kernel is rotated per pixel in a 2x2
+// pattern, which supersampling averages into 4x the directions (without supersampling the pattern stays constant).
+static const float2 CP_AOKernel[6] =
 {
-	{ -0.326, -0.406 }, { -0.840, -0.074 }, { -0.696,  0.457 }, { -0.203,  0.621 },
-	{  0.962, -0.195 }, {  0.473, -0.480 }, {  0.519,  0.767 }, {  0.185, -0.893 },
+	{ 0.300, 0.000 }, { 0.736, 0.425 }, { 0.275, 0.476 },
+	{ 0.000, 1.000 }, {-0.200, 0.346 }, {-0.606, 0.350 },
 };
 
 float CP_Ssao(float2 uv, float2 px)
@@ -70,33 +66,32 @@ float CP_Ssao(float2 uv, float2 px)
 	float d = tex2D(Texture2, uv).r;
 	// radius shrinks with distance: about 24 px at view depth 100, 6..48 px
 	float  r      = clamp(2400.0 * CP_SSAO_RADIUS / d, 6.0, 48.0);
-	float  bias   = d * 0.004;
+	float  bias   = d * 0.002;
 	float  range  = d * 0.08;
+	float2 q      = step(0.5, frac(uv / px));          // 2x2 pattern of the supersampled pixels
+	float  sn, cs;
+	sincos((q.x * 0.5 + q.y * 0.25) * 3.14159265, sn, cs);
 	float  occ    = 0.0;
-	for (int i = 0; i < 8; i++)
+	for (int i = 0; i < 6; i++)
 	{
-		float s    = tex2D(Texture2, uv + CP_AOKernel[i] * px * r).r;
-		float diff = d - s - bias;
-		occ += (diff > 0.0) ? saturate(1.0 - diff / range) : 0.0;
+		float2 k  = CP_AOKernel[i];
+		float2 o  = float2(k.x * cs - k.y * sn, k.x * sn + k.y * cs) * px * r;
+		float  a  = d - tex2D(Texture2, uv + o).r;
+		float  b  = d - tex2D(Texture2, uv - o).r;
+		float  c  = saturate((0.5 * (a + b) - bias) / (range * 0.25));   // concave: the pair is closer on average
+		occ += c * saturate(2.0 - max(a, b) / range);                    // fade occluders far in front
 	}
 	float valid = (d > 0.0 && d < 5000.0) ? 1.0 : 0.0;   // sky / nothing rendered: no occlusion
-	return 1.0 - valid * CP_SSAO_STRENGTH * occ / 8.0;
+	return 1.0 - valid * CP_SSAO_STRENGTH * occ / 6.0;
 }
 
 float3 CP_SceneColor(float2 uv)
 {
-#if CP_FXAA
-	return CP_Fxaa(uv, CP_PixelSize());
-#else
-	return tex2D(Texture1, uv).rgb;
-#endif
+	float3 c = tex2D(Texture1, uv).rgb;
+	return lerp(c, CP_Fxaa(uv, CP_PixelSize()), CP_FXAA_ON);
 }
 
 float CP_AmbientOcclusion(float2 uv)
 {
-#if CP_SSAO
-	return CP_Ssao(uv, CP_PixelSize());
-#else
-	return 1.0;
-#endif
+	return lerp(1.0, CP_Ssao(uv, CP_PixelSize()), CP_SSAO_ON);
 }

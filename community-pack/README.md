@@ -38,7 +38,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Profil-Schutz | (immer an) | Sichert bei jedem Start dein Profil (Einstellungen, Kampagnen-Fortschritt) nach `Documents\S2\users\backup` und stellt es automatisch wieder her, wenn es beschädigt ist – bekannter Fehler: alles zurückgesetzt, nur Mission 1 frei. Protokoll in `bin\gameguard.log`. |
 | Mesh-Cache-Schutz | `[Misc] MeshCache = on` | Leert nach einem Absturz den Mesh-/Shader-Cache (`%LOCALAPPDATA%\S2`) und schaltet ihn ab, wenn der Ordner nicht beschreibbar ist – bekannte Ursache für Abstürze wenige Minuten nach Kartenstart. `off` schaltet den Cache ganz ab. |
 | Kantenglättung | `[Graphics] FXAA = on` | FXAA für die 3D-Szene (braucht `PostFX` und `ImprovedPostFX`). |
-| Umgebungsverdeckung | `[Graphics] SSAO = on` | Kontaktschatten unter Bäumen, Häusern und in Ecken; Stärke `SSAOStrength` (0–1), Radius `SSAORadius` (0.25–4). |
+| Umgebungsverdeckung | `[Graphics] SSAO = on` | Kontaktschatten unter Bäumen, Häusern und in Ecken; Stärke `SSAOStrength` (0–1), Radius `SSAORadius` (0.25–4). Die DLL reicht dafür die Szenentiefe an den Nachbearbeitungs-Pass durch (das Spiel tat das nie). |
 | 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. Getestet (siehe Hinweise). |
 
 Jede Funktion lässt sich einzeln abschalten (`off` bzw. `1`/`1.0`); nach dem nächsten Spielstart sind die Originaldateien automatisch wieder aktiv.
@@ -89,7 +89,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Feature | Switch in `bin\d3d9.ini` | |
 |---|---|---|
 | Skip intro | `[Misc] SkipIntro = off` | No logo videos and no intro film at startup, straight to the main menu. |
-| Settings menu | `[UI] Menu = on`, `MenuKey = F10` | **F10** in the game opens all Community Pack switches with explanations; changes go to `bin\d3d9.ini`, the menu says which need a restart. Esc or F10 closes it. |
+| Settings menu | `[UI] Menu = on`, `MenuKey = F10` | **F10** in the game opens all Community Pack switches with explanations; changes go to `bin\d3d9.ini`, shader effects change live, the menu says which need a restart. Esc or F10 closes it. |
 | HUD scaling | `[UI] Scale = 1.5` | Bigger HUD, dialogs, fonts and minimap on high resolutions; mouse input matches automatically. Reduced automatically on small resolutions (never below 640×480). |
 | HUD filter | `[UI] Filter = linear` | `linear` smooth, `point` crisp pixels (best with `Scale = 2.0`). |
 | HD interface | `[Mods] HDInterface` | All interface textures, the menu logo and the fonts upscaled 2× with Real-ESRGAN (generated on your PC). |
@@ -112,7 +112,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Profile guard | (always on) | Backs up your profile (settings, campaign progress) to `Documents\S2\users\backup` at every start and restores it if it is damaged (known bug: everything reset, only mission 1 left). Log: `bin\gameguard.log`. |
 | Mesh cache guard | `[Misc] MeshCache = on` | Clears the mesh/shader cache (`%LOCALAPPDATA%\S2`) after a crash and disables it if the folder is not writable (known cause of crashes a few minutes into a map). `off` disables the cache. |
 | Anti-aliasing | `[Graphics] FXAA = on` | FXAA on the 3D scene (needs `PostFX` and `ImprovedPostFX`). |
-| Ambient occlusion | `[Graphics] SSAO = on` | Contact shadows under trees, houses and in corners; `SSAOStrength` (0–1), `SSAORadius` (0.25–4). |
+| Ambient occlusion | `[Graphics] SSAO = on` | Contact shadows under trees, houses and in corners; `SSAOStrength` (0–1), `SSAORadius` (0.25–4). The DLL passes the scene depth to the post-processing pass (the game never did). |
 | 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. Tested, see notes below. |
 
 ### Requirements (starting from a vanilla game)

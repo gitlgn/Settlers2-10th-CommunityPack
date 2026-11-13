@@ -41,6 +41,7 @@ float fFPSLimit;
 HRESULT f_IDirect3DDevice9::Present(CONST RECT *pSourceRect, CONST RECT *pDestRect, HWND hDestWindowOverride, CONST RGNDATA *pDirtyRegion)
 {
     NetTrace::onPresent();
+    GfxPatches::restoreStage2(f_pD3DDevice);
     SceneSS::beforePresent(f_pD3DDevice);
     Overlay::onPresent(f_pD3DDevice);
     RDTrigger::onPresent();
@@ -160,6 +161,7 @@ HRESULT f_IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters
     // NOTE: call onLostDevice for custom D3D components here.
 
     SceneSS::release();
+    GfxPatches::beforeReset();
     Overlay::beforeReset();
     HRESULT hr = f_pD3DDevice->Reset(pPresentationParameters);
     if (SUCCEEDED(hr)) { SceneSS::onDeviceReady(f_pD3DDevice); Overlay::afterReset(f_pD3DDevice); }
@@ -766,7 +768,10 @@ HRESULT f_IDirect3DDevice9::SetClipStatus(CONST D3DCLIPSTATUS9 *pClipStatus)
 HRESULT f_IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE State, DWORD Value)
 {
     if (State == D3DRS_FOGENABLE && Value && !GfxPatches::distanceFog()) Value = FALSE;
-    return f_pD3DDevice->SetRenderState(State, Value);
+    bool mask = GfxPatches::filterRenderState(f_pD3DDevice, State, Value);
+    HRESULT hr = f_pD3DDevice->SetRenderState(State, Value);
+    if (mask) GfxPatches::applyWriteMask1(f_pD3DDevice);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::SetRenderTarget(THIS_ DWORD RenderTargetIndex, IDirect3DSurface9* pRenderTarget)
@@ -1071,7 +1076,9 @@ HRESULT f_IDirect3DDevice9::SetTexture(DWORD Stage, IDirect3DBaseTexture9 *pText
     GfxPatches::onSetTexture(Stage, pTexture);
     SceneSS::onSetTexture(Stage, pTexture);
     UIScale::trackTexture(Stage, pTexture);
-    return f_pD3DDevice->SetTexture(Stage, pTexture);
+    HRESULT hr = f_pD3DDevice->SetTexture(Stage, pTexture);
+    if (SUCCEEDED(hr)) GfxPatches::afterSetTexture(f_pD3DDevice, Stage, pTexture);
+    return hr;
 }
 
 HRESULT f_IDirect3DDevice9::SetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value)
@@ -1162,7 +1169,9 @@ HRESULT f_IDirect3DDevice9::GetPixelShaderConstantI(THIS_ UINT StartRegister, in
 
 HRESULT f_IDirect3DDevice9::SetPixelShaderConstantF(THIS_ UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount)
 {
-    return f_pD3DDevice->SetPixelShaderConstantF(StartRegister, pConstantData, Vector4fCount);
+    float live[64 * 4];
+    return f_pD3DDevice->SetPixelShaderConstantF(StartRegister,
+        GfxPatches::liveConstants(false, StartRegister, pConstantData, Vector4fCount, live), Vector4fCount);
 }
 
 HRESULT f_IDirect3DDevice9::GetPixelShaderConstantF(THIS_ UINT StartRegister, float* pConstantData, UINT Vector4fCount)
@@ -1193,7 +1202,9 @@ HRESULT f_IDirect3DDevice9::GetVertexShaderConstantB(THIS_ UINT StartRegister, B
 HRESULT f_IDirect3DDevice9::SetVertexShaderConstantF(THIS_ UINT StartRegister, CONST float* pConstantData, UINT Vector4fCount)
 {
     UIScale::trackVSConst(StartRegister, pConstantData, Vector4fCount);
-    return f_pD3DDevice->SetVertexShaderConstantF(StartRegister, pConstantData, Vector4fCount);
+    float live[64 * 4];
+    return f_pD3DDevice->SetVertexShaderConstantF(StartRegister,
+        GfxPatches::liveConstants(true, StartRegister, pConstantData, Vector4fCount, live), Vector4fCount);
 }
 
 HRESULT f_IDirect3DDevice9::GetVertexShaderConstantF(THIS_ UINT StartRegister, float* pConstantData, UINT Vector4fCount)

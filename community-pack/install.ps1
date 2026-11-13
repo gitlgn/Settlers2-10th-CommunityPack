@@ -1,4 +1,4 @@
-<#
+﻿<#
   Settlers II - 10th Anniversary (Die Siedler II - Die naechste Generation): Community Pack installer
 
   Installs the community d3d9.dll and builds the data packs from YOUR OWN copy of the game.
@@ -264,7 +264,7 @@ $t = Replace-Checked $t "#define RCP_BLUR_SAMPLES`t1 / NUM_BLUR_SAMPLES" ("#defi
     "#ifdef CP_DOF_STRENGTH`r`n#define DOF_STRENGTH`tCP_DOF_STRENGTH`r`n#else`r`n#define DOF_STRENGTH`t0.6`r`n#endif") "postprocess.fx"
 $t = Replace-Checked $t "`t`tresult += tex2D( Texture0, blurCoord );" "`t`tresult += tex2D( Texture0, blurCoord ) * g_BlurWeights[i];" "postprocess.fx blur"
 $t = Replace-Checked $t "`treturn result * RCP_BLUR_SAMPLES;" "`treturn result;" "postprocess.fx blur return"
-$t = Replace-Checked $t "(depth.r  - g_CamFocus.x) * g_CamFocus.y)" "(depth.r  - g_CamFocus.x) * g_CamFocus.y * DOF_STRENGTH)" "postprocess.fx dof"
+$t = Replace-Checked $t "(depth.r  - g_CamFocus.x) * g_CamFocus.y)" "(CP_DOF_DEPTH(depth.r) - g_CamFocus.x) * g_CamFocus.y * DOF_STRENGTH)" "postprocess.fx dof"
 # FXAA + SSAO in the combine pass (switches: [Graphics] FXAA / SSAO, written to community_settings.inc by the DLL)
 $t = Replace-Checked $t "#define ADDRESS_MODE_V0 `tClamp" ("#define ADDRESS_MODE_V0 `tClamp`r`n#define ADDRESS_MODE_U1 `tClamp`r`n#define ADDRESS_MODE_V1 `tClamp`r`n" +
     "#define ADDRESS_MODE_U2 `tClamp`r`n#define ADDRESS_MODE_V2 `tClamp`r`n#define FILTER_MODE_2 `tPoint") "postprocess.fx samplers"
@@ -276,6 +276,7 @@ $t = Replace-Checked $t "`treturn lerp( blur, color, dof.xxxx );" ("`tfloat4`tre
 $t = Replace-Checked $t "compile ps_2_0 ColorAndLuminance" "compile ps_2_b ColorAndLuminance" "postprocess.fx profile"
 Write-PackFile "postfx" "gfx\fx_20\postprocess.fx" $t
 Write-PackFile "postfx" "gfx\fx_20\community_postfx.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_postfx.inc")))
+Write-PackFile "postfx" "gfx\fx_20\community_live.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_live.inc")))
 
 # smooth_shadows: 3x3 PCF (16 taps) in every shader that receives shadows; needs ps_2_b (any Shader Model 3 GPU)
 Reset-Pack "smooth_shadows"
@@ -333,6 +334,7 @@ foreach ($f in Get-ChildItem (Join-Path $Data "gfx\fx_20") -Filter *.fx) {
     Write-PackFile "smooth_shadows" ("gfx\fx_20\" + $f.Name) $t
     $n++
 }
+Write-PackFile "smooth_shadows" "gfx\fx_20\community_live.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_live.inc")))
 Write-PackFile "smooth_shadows" "gfx\fx_20\community_objects.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_objects.inc")))
 Write-PackFile "smooth_shadows" "gfx\fx_20\community_terrain.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_terrain.inc")))
 Write-PackFile "smooth_shadows" "gfx\fx_20\community_water.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_water.inc")))

@@ -8,7 +8,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 
 | | Optimisation | Default |
 |---|---|---|
-| ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
+| ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, shader effects (FXAA, SSAO, DOF, terrain, water, object light, rim light) change live, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
 | ⏩ | **Skip intro** – no logo videos and no intro film at startup, straight to the main menu (`[Misc] SkipIntro`) | off |
 | 🖥️ | **HUD scaling** – interface, dialogs, fonts and minimap scaled for 1440p / 4K / ultrawide; mouse input matches automatically | `Scale = 1.5` |
 | 🔍 | **HD interface** – all interface textures, menu logo and fonts upscaled 2× with Real-ESRGAN | on |
@@ -24,7 +24,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | ⛰️ | **Terrain lighting** – Shader Model 3: sky/ground ambient light for more relief, fine detail layer at close zoom (`ImprovedTerrain`, `TerrainDetail`) | on |
 | 🌊 | **Water** – Shader Model 3: Fresnel reflection, four wave layers, sharp sun glints, lighter water and a foam line at the shore (`ImprovedWater`) | on |
 | 🏠 | **Object lighting** – houses, trees, rocks, settlers get the same sky/ground ambient light as the terrain (`ImprovedObjects`); soft rim light on settlers and animals so they stand out from the ground (`UnitRimLight`, default 0.5) | on |
-| 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners | on |
+| 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners (the DLL binds the scene depth the engine never passed to this pass; transparent objects no longer write it) | on |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
 | 🧹 | **Mesh cache guard** – clears the mesh/shader cache after a crash and disables it if its folder is not writable (known cause of crashes a few minutes into a map); `[Misc] MeshCache` | on |
@@ -57,7 +57,7 @@ Found by reverse engineering the original `S2DNG.exe` (GOG 11757) with [REA](htt
 | Unencrypted Granny models (as mods ship them) are parsed by `granny2.dll` without any check | a damaged model writes past buffers and crashes | `GameFixes` – the header CRC is checked first; message naming the file |
 | Loading a cube map (`0x51F1F0`, e.g. `data\enviroment\cube_0.dds`) is not checked, the texture is used later without a check too | a damaged or unsupported file (e.g. from a mod) or too little memory crashes when a map loads | `GameFixes` – a small neutral replacement texture is used, the map loads |
 | Post-processing (bloom, depth of field) only runs with the launch parameter `-postFX` (`0x405D9A`), which neither GOG nor the shortcuts pass | the game's own post effects – and every shader effect built on them – never run | `PostFX` – the DLL sets the flag itself |
-| Compiled shaders are cached by file name (`%LOCALAPPDATA%\S2`) | changed shader settings have no effect until the cache is cleared | the DLL drops the cached post-processing shader when FXAA/SSAO/DOF settings change |
+| Compiled shaders are cached by file name (`%LOCALAPPDATA%\S2`) | changed shader settings have no effect until the cache is cleared | the effects read their settings from live shader constants (`community_live.inc`), so no recompile is needed; the DLL clears the cache once when the shader interface changes |
 | Direct3D distance fog is switched on for all objects (`0x50C1A0`), tuned for the original zoom | with the extended zoom every tree, house and rock turns pale blue when zoomed far out | `DistanceFog = off` – the DLL blocks the fog state |
 | Mesh cache can be damaged or unwritable | crash a few minutes into a map ([report](https://gog.com/forum/the_settlers_series/settlers_ii_10th_anniversary_crashes_3/page1)) | `Mesh cache guard` |
 
@@ -126,7 +126,7 @@ it decrypts the needed shaders/settings, patches them, and optionally downloads
 | `source/FixDecisions.*`, `source/tests/` | decision logic of the binary fixes + headless tests (`cmake --build build --target FixTests`) |
 | `source/LAAStress.*` | test for the 4 GB flag (`[Misc] LAAStressTest`): blocks the address space below 2 GB during a game |
 | `source/CrashDiag.*` | crash handler (minidump, log) for `DebugMode` |
-| `source/GfxPatches.*` (`community_settings.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, switched from `[Graphics]` |
+| `source/GfxPatches.*` (`community_live.inc`) + `community-pack/shaders/community_postfx.inc` | FXAA and SSAO in the post-processing combine pass, live shader settings, depth target bound for the combine pass |
 | `community-pack/shaders/community_terrain.inc`, `community_water.inc`, `community_objects.inc` | improved terrain and water lighting (included by the patched shaders) |
 | `community-pack/` | installer, uninstaller, ini template, release script, user README |
 

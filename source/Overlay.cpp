@@ -52,16 +52,16 @@ namespace Overlay {
 
         { "Effects", "Graphics", "PostFX", T_BOOL, "on", 0, 0, nullptr, "Post-processing",
           "The game's bloom and depth of field (normally only with -postFX). FXAA and SSAO need it.", false },
-        { "Effects", "Graphics", "DOFStrength", T_FLOAT, "0.3", 0, 1, nullptr, "Depth of field haze", "0 = off, 1 = original game.", false },
-        { "Effects", "Graphics", "FXAA", T_BOOL, "on", 0, 0, nullptr, "FXAA edge smoothing", "", false },
-        { "Effects", "Graphics", "SSAO", T_BOOL, "on", 0, 0, nullptr, "Ambient occlusion (SSAO)", "Contact shadows under trees, houses and in corners.", false },
-        { "Effects", "Graphics", "SSAOStrength", T_FLOAT, "0.6", 0, 1, nullptr, "SSAO strength", "", false },
-        { "Effects", "Graphics", "SSAORadius", T_FLOAT, "1.0", 0.25f, 4, nullptr, "SSAO radius", "", false },
-        { "Effects", "Graphics", "ImprovedTerrain", T_BOOL, "on", 0, 0, nullptr, "Improved terrain", "Sky/ground light and a detail layer at close zoom.", false },
-        { "Effects", "Graphics", "TerrainDetail", T_FLOAT, "0.5", 0, 1, nullptr, "Terrain detail", "", false },
-        { "Effects", "Graphics", "ImprovedWater", T_BOOL, "on", 0, 0, nullptr, "Improved water", "Fresnel reflection, sun glints, shore colour and foam.", false },
-        { "Effects", "Graphics", "ImprovedObjects", T_BOOL, "on", 0, 0, nullptr, "Improved object light", "Houses, trees, rocks with sky/ground light.", false },
-        { "Effects", "Graphics", "UnitRimLight", T_FLOAT, "0.5", 0, 1, nullptr, "Rim light on settlers", "0 = off.", false },
+        { "Effects", "Graphics", "DOFStrength", T_FLOAT, "0.3", 0, 1, nullptr, "Depth of field haze", "0 = off, 1 = original game.", true },
+        { "Effects", "Graphics", "FXAA", T_BOOL, "on", 0, 0, nullptr, "FXAA edge smoothing", "", true },
+        { "Effects", "Graphics", "SSAO", T_BOOL, "on", 0, 0, nullptr, "Ambient occlusion (SSAO)", "Contact shadows under trees, houses and in corners.", true },
+        { "Effects", "Graphics", "SSAOStrength", T_FLOAT, "0.6", 0, 1, nullptr, "SSAO strength", "", true },
+        { "Effects", "Graphics", "SSAORadius", T_FLOAT, "1.0", 0.25f, 4, nullptr, "SSAO radius", "", true },
+        { "Effects", "Graphics", "ImprovedTerrain", T_BOOL, "on", 0, 0, nullptr, "Improved terrain", "Sky/ground light and a detail layer at close zoom.", true },
+        { "Effects", "Graphics", "TerrainDetail", T_FLOAT, "0.5", 0, 1, nullptr, "Terrain detail", "", true },
+        { "Effects", "Graphics", "ImprovedWater", T_BOOL, "on", 0, 0, nullptr, "Improved water", "Fresnel reflection, sun glints, shore colour and foam.", true },
+        { "Effects", "Graphics", "ImprovedObjects", T_BOOL, "on", 0, 0, nullptr, "Improved object light", "Houses, trees, rocks with sky/ground light.", true },
+        { "Effects", "Graphics", "UnitRimLight", T_FLOAT, "0.5", 0, 1, nullptr, "Rim light on settlers", "0 = off.", true },
 
         { "Packs", "Mods", "HDTextures", T_BOOL, "on", 0, 0, nullptr, "HD textures (4K)", "S2-modders 4K remakes.", false },
         { "Packs", "Mods", "HDInterface", T_BOOL, "on", 0, 0, nullptr, "HD interface", "2x upscaled interface textures and fonts.", false },
@@ -130,6 +130,7 @@ namespace Overlay {
         std::string v = current(it);
         WritePrivateProfileStringA(it.section, it.key, (" " + v).c_str(), g_ini.c_str());
         if (it.live && !strcmp(it.key, "DistanceFog")) GfxPatches::setDistanceFog(it.b);
+        else if (it.live) GfxPatches::setLive(it.key, it.type == T_BOOL ? (it.b ? 1.0f : 0.0f) : it.f);
     }
 
     // ------------------------------------------------------------------ input blocking

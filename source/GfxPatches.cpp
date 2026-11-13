@@ -64,6 +64,7 @@ namespace GfxPatches {
         char text[1024];
         _snprintf_s(text, sizeof(text), _TRUNCATE,
             "// written by the Community Pack d3d9.dll from [Graphics] in bin\\d3d9.ini - changes here are overwritten\r\n"
+            "// shader interface 2: the effects take these settings from live constants (community_live.inc)\r\n"
             "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n"
             "#define CP_DOF_STRENGTH %.2f\r\n#define CP_TERRAIN %d\r\n#define CP_TERRAIN_DETAIL %.2f\r\n#define CP_WATER %d\r\n#define CP_OBJECTS %d\r\n#define CP_UNIT_RIM %.2f\r\n",
             iniOn(iniPath, "FXAA", "on") ? 1 : 0, iniOn(iniPath, "SSAO", "on") ? 1 : 0,
@@ -106,6 +107,55 @@ namespace GfxPatches {
     bool distanceFog() { return g_fog; }
     void setDistanceFog(bool on) { g_fog = on; }
 
+    // ---- live shader settings (community_live.inc) ----
+    struct LiveSlot { bool vertex; unsigned reg; float marker; const char* keys[3]; float v[3]; };
+    static LiveSlot g_live[] = {
+        { false, 28, 7771.0f, { "FXAA", "SSAO", "SSAOStrength" },                   { 1.0f, 1.0f, 0.6f } },
+        { false, 29, 7772.0f, { "SSAORadius", "DOFStrength", "ImprovedTerrain" },  { 1.0f, 0.3f, 1.0f } },
+        { false, 30, 7773.0f, { "TerrainDetail", "ImprovedWater", "ImprovedObjects" }, { 0.5f, 1.0f, 1.0f } },
+        { false, 31, 7774.0f, { "UnitRimLight", nullptr, nullptr },                 { 0.5f, 0.0f, 0.0f } },
+        { true, 249, 7775.0f, { "UnitRimLight", nullptr, nullptr },                 { 0.5f, 0.0f, 0.0f } },
+    };
+
+    static void loadLive(const char* iniPath) {
+        for (auto& s : g_live)
+            for (int i = 0; i < 3; i++) {
+                const char* k = s.keys[i];
+                if (!k) continue;
+                char v[32];
+                GetPrivateProfileStringA("Graphics", k, "", v, sizeof(v), iniPath);
+                if (!v[0]) continue;
+                if (!_stricmp(v, "on") || !_stricmp(v, "true")) s.v[i] = 1.0f;
+                else if (!_stricmp(v, "off") || !_stricmp(v, "false")) s.v[i] = 0.0f;
+                else s.v[i] = (float)atof(v);
+            }
+    }
+
+    bool setLive(const char* key, float value) {
+        bool found = false;
+        for (auto& s : g_live)
+            for (int i = 0; i < 3; i++)
+                if (s.keys[i] && !_stricmp(s.keys[i], key)) { s.v[i] = value; found = true; }
+        return found;
+    }
+
+    const float* liveConstants(bool vertex, unsigned start, const float* data, unsigned count, float* scratch) {
+        if (!data || !count) return data;
+        const float* out = data;
+        for (auto& s : g_live) {
+            if (s.vertex != vertex || s.reg < start || s.reg >= start + count) continue;
+            unsigned o = (s.reg - start) * 4;
+            if (data[o + 3] != s.marker) continue;                 // another shader's constant: leave it
+            if (out == data) {
+                if (count > 64) return data;                        // scratch holds 64 registers
+                memcpy(scratch, data, count * 16);
+                out = scratch;
+            }
+            scratch[o] = s.v[0]; scratch[o + 1] = s.v[1]; scratch[o + 2] = s.v[2];
+        }
+        return out;
+    }
+
     void init(const char* iniPath, const char* logPath) {
         g_debug = logPath != nullptr;
         {
@@ -117,6 +167,7 @@ namespace GfxPatches {
         }
         if (g_debug) { g_log = logPath; DeleteFileA(logPath); }
         writeShaderSettings(iniPath);
+        loadLive(iniPath);
         for (auto& p : g_patches) {
             p.scale = GetPrivateProfileIntA("Graphics", p.key, 1, iniPath);
             if (p.scale != 2 && p.scale != 4) p.scale = 1;
@@ -156,7 +207,81 @@ namespace GfxPatches {
     static std::set<void*> g_seenOnStage5;
     static unsigned g_frames = 0;
 
+    // ---- depth for the post-processing combine pass ----
+    // The scene writes the linear view depth into a second R32F render target, but the engine binds it only for the
+    // bloom pass (stage 1). The final combine pass (blur on stage 0, scene colour on stage 1) samples Texture2, which
+    // never held the depth: the game's depth of field blurred the whole picture evenly and SSAO had nothing to work
+    // with. When the scene colour target goes to stage 1, the depth target is bound to stage 2 as well.
+    struct Size { UINT w, h; };
+    static std::map<void*, Size> g_sceneRTs;           // colour render target textures by size
+    static IDirect3DTexture9* g_depthTex = nullptr;    // the R32F depth target (no reference held)
+    static Size g_depthSize = {};
+    static IDirect3DBaseTexture9* g_game2 = nullptr;   // what the game last bound to stage 2
+    static bool g_depthBound = false;
+
+    static void trackSceneTarget(UINT w, UINT h, DWORD usage, D3DFORMAT fmt, void* tex) {
+        if (!(usage & D3DUSAGE_RENDERTARGET)) return;
+        if (fmt == D3DFMT_R32F) {
+            g_depthTex = (IDirect3DTexture9*)tex;
+            g_depthSize = { w, h };
+            logf("depth target %ux%u: bound to stage 2 for the post-processing combine pass", w, h);
+        } else g_sceneRTs[tex] = { w, h };
+    }
+
+    // Alpha-blended objects (roads, flags, smoke, decals) would blend their depth into the depth target as well - with
+    // the depth itself as alpha, which gives garbage. While blending is on, the second render target is write-protected,
+    // so the depth keeps what lies behind them (as transparent objects should).
+    static bool g_blend = false;
+    static DWORD g_writeMask1 = 0xF;   // what the game set for D3DRS_COLORWRITEENABLE1
+
+    bool filterRenderState(IDirect3DDevice9* dev, D3DRENDERSTATETYPE state, DWORD& value) {
+        if (state == D3DRS_COLORWRITEENABLE1) {
+            g_writeMask1 = value;
+            if (g_blend) value = 0;
+            return false;
+        }
+        if (state == D3DRS_ALPHABLENDENABLE) {
+            g_blend = value != FALSE;
+            return true;   // the caller applies the write mask after the blend state
+        }
+        return false;
+    }
+
+    void applyWriteMask1(IDirect3DDevice9* dev) {
+        dev->SetRenderState(D3DRS_COLORWRITEENABLE1, g_blend ? 0 : g_writeMask1);
+    }
+
+    void beforeReset() {
+        g_blend = false;
+        g_writeMask1 = 0xF;
+        g_sceneRTs.clear();
+        g_depthTex = nullptr;
+        g_game2 = nullptr;
+        g_depthBound = false;
+    }
+
+    void afterSetTexture(IDirect3DDevice9* dev, DWORD stage, IDirect3DBaseTexture9* tex) {
+        if (stage == 2) { g_game2 = tex; g_depthBound = false; return; }
+        if (stage != 1 || !g_depthTex) return;
+        auto it = tex ? g_sceneRTs.find(tex) : g_sceneRTs.end();
+        bool combine = it != g_sceneRTs.end() && it->second.w == g_depthSize.w && it->second.h == g_depthSize.h;
+        if (combine) {
+            dev->SetTexture(2, g_depthTex);
+            g_depthBound = true;
+        } else if (g_depthBound) {
+            dev->SetTexture(2, g_game2);
+            g_depthBound = false;
+        }
+    }
+
+    void restoreStage2(IDirect3DDevice9* dev) {
+        if (!g_depthBound) return;
+        dev->SetTexture(2, g_game2);
+        g_depthBound = false;
+    }
+
     void onCreateTexture(UINT w, UINT h, DWORD usage, D3DFORMAT fmt, void* tex) {
+        trackSceneTarget(w, h, usage, fmt, tex);
         if (!g_debug || !(usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL))) return;
         g_rts[tex] = { w, h, fmt };
         logf("render target texture %p: %ux%u fmt %d usage %lX", tex, w, h, (int)fmt, usage);
