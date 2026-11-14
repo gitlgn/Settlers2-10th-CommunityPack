@@ -131,6 +131,16 @@ namespace GfxPatches {
             }
     }
 
+    // comparison shots: the community shader effects switched to the original game's look (switches off; no depth of
+    // field, since the GOG game starts without post-processing), without touching the user's settings
+    static bool g_vanilla = false;
+    static float vanillaValue(const char* key, float v) {
+        if (!key) return v;
+        static const char* off[] = { "FXAA", "SSAO", "ImprovedTerrain", "ImprovedWater", "ImprovedObjects", "UnitRimLight", "DOFStrength" };
+        for (const char* k : off) if (!_stricmp(k, key)) return 0.0f;
+        return v;
+    }
+
     bool setLive(const char* key, float value) {
         bool found = false;
         for (auto& s : g_live)
@@ -151,10 +161,12 @@ namespace GfxPatches {
                 memcpy(scratch, data, count * 16);
                 out = scratch;
             }
-            scratch[o] = s.v[0]; scratch[o + 1] = s.v[1]; scratch[o + 2] = s.v[2];
+            for (int i = 0; i < 3; i++) scratch[o + i] = g_vanilla ? vanillaValue(s.keys[i], s.v[i]) : s.v[i];
         }
         return out;
     }
+
+    void setVanillaShaders(bool on) { g_vanilla = on; }
 
     void init(const char* iniPath, const char* logPath) {
         g_debug = logPath != nullptr;
@@ -222,6 +234,10 @@ namespace GfxPatches {
     static void trackSceneTarget(UINT w, UINT h, DWORD usage, D3DFORMAT fmt, void* tex) {
         if (!(usage & D3DUSAGE_RENDERTARGET)) return;
         if (fmt == D3DFMT_R32F) {
+            // the scene depth has the size of a colour target created before it (the shadow map is R32F on some GPUs)
+            bool scene = false;
+            for (auto& c : g_sceneRTs) if (c.second.w == w && c.second.h == h) { scene = true; break; }
+            if (!scene) return;
             g_depthTex = (IDirect3DTexture9*)tex;
             g_depthSize = { w, h };
             logf("depth target %ux%u: bound to stage 2 for the post-processing combine pass", w, h);

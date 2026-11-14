@@ -30,4 +30,6 @@ namespace GfxPatches {
     const float* liveConstants(bool vertex, unsigned start, const float* data, unsigned count, float* scratch);
     // from the in-game menu: ini key ("FXAA", "SSAOStrength", ...) and its new value (switches: 0 / 1)
     bool setLive(const char* key, float value);
+    // comparison shots (bin\compare.trigger): the shader effects as in the original game, settings untouched
+    void setVanillaShaders(bool on);
 }
