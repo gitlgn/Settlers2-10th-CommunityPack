@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "FixDecisions.h"
+#include <cstdlib>
 
 namespace FixDecisions {
 
@@ -29,6 +30,19 @@ bool checkTransferPath(GameString* s, const std::string& docsPrefix, long* block
         s->size = 0;
     }
     return bad;
+}
+
+float parseIniFloat(const char* text, float def) {
+    if (!text) return def;
+    char buf[64];
+    size_t n = 0;
+    while (*text == ' ' || *text == '\t') text++;
+    for (; *text && n < sizeof(buf) - 1; text++) buf[n++] = (*text == ',') ? '.' : *text;
+    buf[n] = 0;
+    char* end = nullptr;
+    double v = strtod(buf, &end);   // the DLL never changes the C locale: '.' is the decimal separator
+    if (end == buf) return def;
+    return (float)v;
 }
 
 } // namespace FixDecisions

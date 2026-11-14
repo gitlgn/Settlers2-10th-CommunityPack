@@ -1,4 +1,5 @@
 #include "Overlay.h"
+#include "FixDecisions.h"
 #include "GfxPatches.h"
 
 #include <windows.h>
@@ -118,7 +119,7 @@ namespace Overlay {
         for (auto& it : g_items) {
             std::string v = readIni(it);
             it.b = isOn(v);
-            it.f = (float)atof(v.c_str());
+            it.f = FixDecisions::parseIniFloat(v.c_str(), FixDecisions::parseIniFloat(it.def, 0.0f));
             if (it.f < it.mn) it.f = it.mn;
             if (it.mx > it.mn && it.f > it.mx) it.f = it.mx;
             it.c = 0;

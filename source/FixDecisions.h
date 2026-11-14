@@ -37,4 +37,9 @@ bool clampStringRead(const unsigned char* data, int len, int pos, short* lengthO
 // Returns true if the request was blocked.
 bool checkTransferPath(GameString* path, const std::string& docsPrefix, long* blockedCount);
 
+// Number from d3d9.ini: accepts a decimal point or a decimal comma ("0.6" and "0,6", as typed on
+// German/European systems; atof alone reads "0,6" as 0), surrounding spaces, and returns def for an
+// empty or non-numeric value.
+float parseIniFloat(const char* text, float def);
+
 } // namespace FixDecisions

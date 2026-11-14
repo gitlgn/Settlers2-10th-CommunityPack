@@ -72,7 +72,7 @@ namespace ModSync {
         char v[32];
         GetPrivateProfileStringA("Mods", key, def ? "on" : "off", v, sizeof(v), ini);
         std::string s = v;
-        for (auto& c : s) c = (char)tolower(c);
+        for (auto& c : s) c = (char)tolower((unsigned char)c);
         return s == "on" || s == "true" || s == "1" || s == "yes";
     }
 

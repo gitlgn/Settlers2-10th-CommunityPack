@@ -249,9 +249,23 @@ static void testCheckTransferPath() {
 
 // --------------------------------------------------------------------------- main
 
+static void testParseIniFloat() {
+    section("parseIniFloat");
+    auto approx = [](float a, float b) { return a > b - 0.0001f && a < b + 0.0001f; };
+    CHECK(approx(FixDecisions::parseIniFloat("0.6", 9), 0.6f), "decimal point");
+    CHECK(approx(FixDecisions::parseIniFloat("0,6", 9), 0.6f), "decimal comma");
+    CHECK(approx(FixDecisions::parseIniFloat("  1,25 ", 9), 1.25f), "spaces and comma");
+    CHECK(approx(FixDecisions::parseIniFloat("2", 9), 2.0f), "integer");
+    CHECK(approx(FixDecisions::parseIniFloat("", 0.3f), 0.3f), "empty -> default");
+    CHECK(approx(FixDecisions::parseIniFloat("on", 0.3f), 0.3f), "text -> default");
+    CHECK(approx(FixDecisions::parseIniFloat(nullptr, 0.3f), 0.3f), "null -> default");
+    CHECK(approx(FixDecisions::parseIniFloat("-0,5", 9), -0.5f), "negative comma");
+}
+
 int main() {
     testClampStringRead();
     testCheckTransferPath();
+    testParseIniFloat();
 
     printf("\nFixDecisions tests: %d passed, %d failed\n", g_pass, g_fail);
     if (g_fail == 0) { printf("ALL TESTS PASSED\n"); return 0; }

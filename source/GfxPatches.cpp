@@ -1,4 +1,5 @@
 #include "GfxPatches.h"
+#include "FixDecisions.h"
 
 #include <windows.h>
 #include <cstdarg>
@@ -51,7 +52,7 @@ namespace GfxPatches {
         char v[16], d[16];
         _snprintf_s(d, sizeof(d), _TRUNCATE, "%.2f", def);
         GetPrivateProfileStringA("Graphics", key, d, v, sizeof(v), iniPath);
-        float f = (float)atof(v);
+        float f = FixDecisions::parseIniFloat(v, def);
         return f < lo ? lo : f > hi ? hi : f;
     }
 
@@ -127,7 +128,7 @@ namespace GfxPatches {
                 if (!v[0]) continue;
                 if (!_stricmp(v, "on") || !_stricmp(v, "true")) s.v[i] = 1.0f;
                 else if (!_stricmp(v, "off") || !_stricmp(v, "false")) s.v[i] = 0.0f;
-                else s.v[i] = (float)atof(v);
+                else s.v[i] = FixDecisions::parseIniFloat(v, s.v[i]);
             }
     }
 

@@ -1,4 +1,5 @@
 #include "UIScale.h"
+#include "FixDecisions.h"
 
 #include <windows.h>
 #include <cstdarg>
@@ -265,7 +266,7 @@ namespace UIScale {
 
         char v[32];
         GetPrivateProfileStringA("UI", "Scale", "1.0", v, sizeof(v), iniPath);
-        g_scale = (float)atof(v);
+        g_scale = FixDecisions::parseIniFloat(v, 1.0f);
         g_scaleOn = g_scale > 1.01f && g_scale <= 3.0f;
         if (!g_scaleOn) g_scale = 1.0f;
         // supersampling needs the HUD hooks even without HUD scaling (all pre-transformed draws are rescaled)
