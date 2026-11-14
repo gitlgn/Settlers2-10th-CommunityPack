@@ -8,7 +8,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 
 | | Optimisation | Default |
 |---|---|---|
-| ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, shader effects (FXAA, SSAO, DOF, terrain, water, object light, rim light) change live, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
+| ⚙️ | **In-game settings menu** – F10 opens all Community Pack switches (graphics, effects, packs, interface, fixes) with explanations; changes are saved to `bin\d3d9.ini`, shader effects (FXAA, SSAO, DOF, bloom, terrain, water, object light, rim light) change live, the menu says which need a restart (`[UI] Menu`, `MenuKey`) | on |
 | ⏩ | **Skip intro** – no logo videos and no intro film at startup, straight to the main menu (`[Misc] SkipIntro`) | off |
 | 🖥️ | **HUD scaling** – interface, dialogs, fonts and minimap scaled for 1440p / 4K / ultrawide; mouse input matches automatically | `Scale = 1.5` |
 | 🔍 | **HD interface** – all interface textures, menu logo and fonts upscaled 2× with Real-ESRGAN | on |
@@ -25,6 +25,7 @@ built on top of the [Community Patch](https://github.com/S2-modders/Settlers-DNG
 | 🌊 | **Water** – Shader Model 3: Fresnel reflection, four wave layers, sharp sun glints, lighter water and a foam line at the shore (`ImprovedWater`) | on |
 | 🏠 | **Object lighting** – houses, trees, rocks, settlers get the same sky/ground ambient light as the terrain (`ImprovedObjects`); soft rim light on settlers and animals so they stand out from the ground (`UnitRimLight`, default 0.5) | on |
 | 🌑 | **SSAO** – ambient occlusion: contact shadows under trees, houses and in corners (the DLL binds the scene depth the engine never passed to this pass; transparent objects no longer write it) | on |
+| ✨ | **Bloom** – soft glow around bright areas such as sunlit water and white walls; the original computed its brightness mask from the depth target and never used it (`[Graphics] Bloom` 0–1, `BloomThreshold`) | off |
 | 🧠 | **4 GB memory** – large-address-aware flag on `S2DNG.exe` (2 GB → 4 GB address space; fewer out-of-memory crashes with HD content; stress-tested: the game runs with its memory above 2 GB; its shader compiler d3dx9_29, which cannot, gets reserved memory below 2 GB – `[Misc] LowHeap`) | on |
 | 💾 | **Profile guard** – backs up your profile (settings + campaign progress) at every start and restores it automatically if it gets damaged (known bug: everything reset, only mission 1 left) | on |
 | 🧹 | **Mesh cache guard** – clears the mesh/shader cache after a crash and disables it if its folder is not writable (known cause of crashes a few minutes into a map); `[Misc] MeshCache` | on |

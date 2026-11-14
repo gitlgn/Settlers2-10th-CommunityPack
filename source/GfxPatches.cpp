@@ -65,7 +65,7 @@ namespace GfxPatches {
         char text[1024];
         _snprintf_s(text, sizeof(text), _TRUNCATE,
             "// written by the Community Pack d3d9.dll from [Graphics] in bin\\d3d9.ini - changes here are overwritten\r\n"
-            "// shader interface 2: the effects take these settings from live constants (community_live.inc)\r\n"
+            "// shader interface 3: the effects take these settings from live constants (community_live.inc), bloom\r\n"
             "#define CP_FXAA %d\r\n#define CP_SSAO %d\r\n#define CP_SSAO_STRENGTH %.2f\r\n#define CP_SSAO_RADIUS %.2f\r\n"
             "#define CP_DOF_STRENGTH %.2f\r\n#define CP_TERRAIN %d\r\n#define CP_TERRAIN_DETAIL %.2f\r\n#define CP_WATER %d\r\n#define CP_OBJECTS %d\r\n#define CP_UNIT_RIM %.2f\r\n",
             iniOn(iniPath, "FXAA", "on") ? 1 : 0, iniOn(iniPath, "SSAO", "on") ? 1 : 0,
@@ -114,7 +114,7 @@ namespace GfxPatches {
         { false, 28, 7771.0f, { "FXAA", "SSAO", "SSAOStrength" },                   { 1.0f, 1.0f, 0.6f } },
         { false, 29, 7772.0f, { "SSAORadius", "DOFStrength", "ImprovedTerrain" },  { 1.0f, 0.3f, 1.0f } },
         { false, 30, 7773.0f, { "TerrainDetail", "ImprovedWater", "ImprovedObjects" }, { 0.5f, 1.0f, 1.0f } },
-        { false, 31, 7774.0f, { "UnitRimLight", nullptr, nullptr },                 { 0.5f, 0.0f, 0.0f } },
+        { false, 31, 7774.0f, { "UnitRimLight", "Bloom", "BloomThreshold" },        { 0.5f, 0.0f, 0.75f } },
         { true, 249, 7775.0f, { "UnitRimLight", nullptr, nullptr },                 { 0.5f, 0.0f, 0.0f } },
     };
 
@@ -137,7 +137,7 @@ namespace GfxPatches {
     static bool g_vanilla = false;
     static float vanillaValue(const char* key, float v) {
         if (!key) return v;
-        static const char* off[] = { "FXAA", "SSAO", "ImprovedTerrain", "ImprovedWater", "ImprovedObjects", "UnitRimLight", "DOFStrength" };
+        static const char* off[] = { "FXAA", "SSAO", "ImprovedTerrain", "ImprovedWater", "ImprovedObjects", "UnitRimLight", "DOFStrength", "Bloom" };
         for (const char* k : off) if (!_stricmp(k, key)) return 0.0f;
         return v;
     }

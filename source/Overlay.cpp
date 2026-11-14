@@ -64,6 +64,8 @@ namespace Overlay {
         { "Effects", "Graphics", "ImprovedWater", T_BOOL, "on", 0, 0, nullptr, "Improved water", "Fresnel reflection, sun glints, shore colour and foam.", true },
         { "Effects", "Graphics", "ImprovedObjects", T_BOOL, "on", 0, 0, nullptr, "Improved object light", "Houses, trees, rocks with sky/ground light.", true },
         { "Effects", "Graphics", "UnitRimLight", T_FLOAT, "0.5", 0, 1, nullptr, "Rim light on settlers", "0 = off.", true },
+        { "Effects", "Graphics", "Bloom", T_FLOAT, "0", 0, 1, nullptr, "Bloom", "Soft glow around bright areas (sunlit water, white walls). 0 = off. Needs post-processing.", true },
+        { "Effects", "Graphics", "BloomThreshold", T_FLOAT, "0.75", 0.5f, 0.95f, nullptr, "Bloom threshold", "How bright an area must be to glow.", true },
 
         { "Packs", "Mods", "HDTextures", T_BOOL, "on", 0, 0, nullptr, "HD textures (4K)", "S2-modders 4K remakes.", false },
         { "Packs", "Mods", "HDInterface", T_BOOL, "on", 0, 0, nullptr, "HD interface", "2x upscaled interface textures and fonts.", false },

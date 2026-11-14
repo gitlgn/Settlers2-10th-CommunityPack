@@ -53,6 +53,10 @@ ImprovedWater = on
 ImprovedObjects = on
 ; rim light on settlers and animals (they stand out from the ground): 0.0 = off ... 1.0
 UnitRimLight = 0.5
+; bloom: soft glow around bright areas (sunlit water, white walls) - 0.0 = off ... 1.0 (needs PostFX = on)
+Bloom = 0.0
+; how bright an area must be to glow: 0.5 (much glows) ... 0.95 (only the brightest spots)
+BloomThreshold = 0.75
 ; the game's distance fog: with the extended zoom it turns every object pale when zoomed far out (off = no fog)
 DistanceFog = off
 

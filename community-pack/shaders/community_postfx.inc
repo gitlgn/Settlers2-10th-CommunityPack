@@ -91,6 +91,20 @@ float3 CP_SceneColor(float2 uv)
 	return lerp(c, CP_Fxaa(uv, CP_PixelSize()), CP_FXAA_ON);
 }
 
+// bloom: the copy pass stores how far the brightest of its 9 scene samples lies above the threshold in alpha (the
+// original read the depth target there and nothing used the value); the blur passes soften it, the combine pass
+// adds the blurred bright areas. sum3 = r + g + b of that sample.
+float CP_BloomMask(float sum3)
+{
+	float l = sum3 / 3.0;
+	return saturate((l - CP_BLOOM_THRESHOLD) / max(1.0 - CP_BLOOM_THRESHOLD, 0.01));
+}
+
+float3 CP_Bloom(float4 blur)
+{
+	return blur.rgb * blur.a * CP_BLOOM_STRENGTH;
+}
+
 float CP_AmbientOcclusion(float2 uv)
 {
 	return lerp(1.0, CP_Ssao(uv, CP_PixelSize()), CP_SSAO_ON);

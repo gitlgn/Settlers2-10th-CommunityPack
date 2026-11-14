@@ -11,7 +11,7 @@
 float4 cp_LiveA : register(c28) = { 1.0, 1.0, 0.6, 7771.0 };    // FXAA on, SSAO on, SSAO strength
 float4 cp_LiveB : register(c29) = { 1.0, 0.3, 1.0, 7772.0 };    // SSAO radius, depth-of-field strength, terrain on
 float4 cp_LiveC : register(c30) = { 0.5, 1.0, 1.0, 7773.0 };    // terrain detail, water on, objects on
-float4 cp_LiveD : register(c31) = { 0.5, 0.0, 0.0, 7774.0 };    // rim light (pixel shaders)
+float4 cp_LiveD : register(c31) = { 0.5, 0.0, 0.75, 7774.0 };   // rim light (pixel shaders), bloom strength, bloom threshold
 float4 cp_LiveV : register(c249) = { 0.5, 0.0, 0.0, 7775.0 };   // rim light (vertex shaders)
 
 #define CP_FXAA_ON          cp_LiveA.x
@@ -24,6 +24,8 @@ float4 cp_LiveV : register(c249) = { 0.5, 0.0, 0.0, 7775.0 };   // rim light (ve
 #define CP_WATER_ON         cp_LiveC.y
 #define CP_OBJECTS_ON       cp_LiveC.z
 #define CP_UNIT_RIM         cp_LiveD.x
+#define CP_BLOOM_STRENGTH   cp_LiveD.y
+#define CP_BLOOM_THRESHOLD  cp_LiveD.z
 #define CP_UNIT_RIM_VS      cp_LiveV.x
 
 #endif

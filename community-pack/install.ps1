@@ -272,7 +272,12 @@ $t = Replace-Checked $t "#include `"shared.inc`"" "#include `"shared.inc`"`r`n#i
 $t = Replace-Checked $t "`tfloat4`tcolor`t= tex2D( Texture1, IN.texcoord1 );`t// normal scene" ("`tfloat4`tcolor`t= tex2D( Texture1, IN.texcoord1 );`t// normal scene`r`n" +
     "`tcolor.rgb`t= CP_SceneColor( IN.texcoord1 );`t// community pack: FXAA") "postprocess.fx fxaa"
 $t = Replace-Checked $t "`treturn lerp( blur, color, dof.xxxx );" ("`tfloat4`tresult`t= lerp( blur, color, dof.xxxx );`r`n" +
-    "`tresult.rgb`t*= CP_AmbientOcclusion( IN.texcoord1 );`t// community pack: SSAO`r`n`treturn result;") "postprocess.fx ssao"
+    "`tresult.rgb`t*= CP_AmbientOcclusion( IN.texcoord1 );`t// community pack: SSAO`r`n" +
+    "`tresult.rgb`t+= CP_Bloom( blur );`t// community pack: bloom`r`n`treturn result;") "postprocess.fx ssao"
+# bloom: the copy pass measured its brightness mask from the depth target (stage 1 there) and nothing used it;
+# now it comes from the scene image and the combine pass adds the blurred bright areas ([Graphics] Bloom)
+$t = Replace-Checked $t "`t`tfloat4`tlumSample`t= tex2D( Texture1, texTap );" "`t`tfloat4`tlumSample`t= tex2D( Texture0, texTap );`t// community pack: brightness from the scene image" "postprocess.fx bloom source"
+$t = Replace-Checked $t "`tcolor.a`t`t= saturate( L - bloomParameter.y );" "`tcolor.a`t`t= CP_BloomMask( L );`t// community pack: bloom mask" "postprocess.fx bloom mask"
 $t = Replace-Checked $t "compile ps_2_0 ColorAndLuminance" "compile ps_2_b ColorAndLuminance" "postprocess.fx profile"
 Write-PackFile "postfx" "gfx\fx_20\postprocess.fx" $t
 Write-PackFile "postfx" "gfx\fx_20\community_postfx.inc" ([IO.File]::ReadAllText((Join-Path $PackDir "shaders\community_postfx.inc")))

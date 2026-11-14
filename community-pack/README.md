@@ -25,7 +25,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Schattenauflösung | `[Graphics] ShadowMapScale = 2` | Schattenkarte 4096×4096 statt 2048×2048 (bei höchster Schattenstufe; `4` = 8192²). |
 | Spiegelungen | `[Graphics] ReflectionMapScale = 2` | Wasserspiegelung 4096×2048 statt 2048×1024. |
 | Sichtweite | `[Mods] LODFix` | Weniger Aufpoppen beim Herauszoomen (Werte aus dem 4K-Projekt). |
-| Nachbearbeitung | `[Graphics] PostFX = on` | Bloom und Tiefenunschärfe des Spiels – bisher nur mit dem Startparameter `-postFX` aktiv, den GOG nicht übergibt; die DLL schaltet sie ein. FXAA und SSAO brauchen sie. |
+| Nachbearbeitung | `[Graphics] PostFX = on` | Tiefenunschärfe-Schleier des Spiels (echtes Bloom hatte das Original nicht) – bisher nur mit dem Startparameter `-postFX` aktiv, den GOG nicht übergibt; die DLL schaltet sie ein. FXAA und SSAO brauchen sie. |
 | Weichere Nachbearbeitung | `[Mods] ImprovedPostFX` | Gauß-Weichzeichner für Bloom; Stärke der Tiefenunschärfe `[Graphics] DOFStrength` (0 = aus … 1 = Original, Standard 0.3). |
 | Supersampling | `[Graphics] Supersampling = off` | Szene (und ohne Nachbearbeitung auch die Oberfläche) in doppelter Auflösung berechnet und verkleinert: glatte Kanten an Laub, Dächern und Polygonen, feinere Texturen. Etwa 10 % weniger FPS (3440×1440, RX 9070 XT). `SupersamplingMSAA = 0/2/4/8` zusätzlich (nur ohne Nachbearbeitung). |
 | Boden | `[Graphics] ImprovedTerrain = on` | Shader Model 3: Himmels-/Bodenlicht für mehr Relief, feine Detailstruktur beim Hineinzoomen (`TerrainDetail` 0–1). Braucht `SmoothShadows`. |
@@ -39,6 +39,7 @@ HUD scaling for high resolutions, sharper interface, soft and sharp shadows, HD 
 | Mesh-Cache-Schutz | `[Misc] MeshCache = on` | Leert nach einem Absturz den Mesh-/Shader-Cache (`%LOCALAPPDATA%\S2`) und schaltet ihn ab, wenn der Ordner nicht beschreibbar ist – bekannte Ursache für Abstürze wenige Minuten nach Kartenstart. `off` schaltet den Cache ganz ab. |
 | Kantenglättung | `[Graphics] FXAA = on` | FXAA für die 3D-Szene (braucht `PostFX` und `ImprovedPostFX`). |
 | Umgebungsverdeckung | `[Graphics] SSAO = on` | Kontaktschatten unter Bäumen, Häusern und in Ecken; Stärke `SSAOStrength` (0–1), Radius `SSAORadius` (0.25–4). Die DLL reicht dafür die Szenentiefe an den Nachbearbeitungs-Pass durch (das Spiel tat das nie). |
+| Bloom | `[Graphics] Bloom = 0.0` | Weiches Leuchten heller Flächen (sonniges Wasser, weiße Mauern); Stärke 0–1 (0 = aus), Schwelle `BloomThreshold` (0.5–0.95). Braucht die Nachbearbeitung. |
 | 4 GB Speicher | (Installer) | `S2DNG.exe` bekommt das Large-Address-Aware-Flag: 4 GB statt 2 GB Adressraum, weniger Abstürze durch Speichermangel. Die Deinstallation entfernt es wieder. Getestet (siehe Hinweise). |
 
 Jede Funktion lässt sich einzeln abschalten (`off` bzw. `1`/`1.0`); nach dem nächsten Spielstart sind die Originaldateien automatisch wieder aktiv.
@@ -99,7 +100,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Shadow resolution | `[Graphics] ShadowMapScale = 2` | 4096² instead of 2048² at the highest shadow setting (`4` = 8192²). |
 | Reflections | `[Graphics] ReflectionMapScale = 2` | Water reflection 4096×2048 instead of 2048×1024. |
 | View distance | `[Mods] LODFix` | Less pop-in when zoomed out. |
-| Post-processing | `[Graphics] PostFX = on` | The game's bloom and depth of field – so far only active with the launch parameter `-postFX`, which GOG does not pass; the DLL switches them on. FXAA and SSAO need them. |
+| Post-processing | `[Graphics] PostFX = on` | The game's depth-of-field haze (the original had no real bloom) – so far only active with the launch parameter `-postFX`, which GOG does not pass; the DLL switches them on. FXAA and SSAO need them. |
 | Softer post-processing | `[Mods] ImprovedPostFX` | Gaussian bloom blur; depth-of-field strength `[Graphics] DOFStrength` (0 = off … 1 = original, default 0.3). |
 | Supersampling | `[Graphics] Supersampling = off` | Scene (and without post-processing also the HUD) rendered at twice the resolution and shrunk: smooth foliage, roof and polygon edges, finer textures. About 10 % fewer FPS (3440×1440, RX 9070 XT). Plus `SupersamplingMSAA = 0/2/4/8` (only without post-processing). |
 | Terrain | `[Graphics] ImprovedTerrain = on` | Shader Model 3: sky/ground ambient light for more relief, fine detail layer at close zoom (`TerrainDetail` 0–1). Needs `SmoothShadows`. |
@@ -113,6 +114,7 @@ Deinstallation: `CommunityPack\uninstall.cmd` (stellt alle Originaldateien und d
 | Mesh cache guard | `[Misc] MeshCache = on` | Clears the mesh/shader cache (`%LOCALAPPDATA%\S2`) after a crash and disables it if the folder is not writable (known cause of crashes a few minutes into a map). `off` disables the cache. |
 | Anti-aliasing | `[Graphics] FXAA = on` | FXAA on the 3D scene (needs `PostFX` and `ImprovedPostFX`). |
 | Ambient occlusion | `[Graphics] SSAO = on` | Contact shadows under trees, houses and in corners; `SSAOStrength` (0–1), `SSAORadius` (0.25–4). The DLL passes the scene depth to the post-processing pass (the game never did). |
+| Bloom | `[Graphics] Bloom = 0.0` | Soft glow around bright areas (sunlit water, white walls); strength 0–1 (0 = off), threshold `BloomThreshold` (0.5–0.95). Needs post-processing. |
 | 4 GB memory | (installer) | Sets the large-address-aware flag on `S2DNG.exe`: 4 GB instead of 2 GB address space. Removed again by the uninstaller. Tested, see notes below. |
 
 ### Requirements (starting from a vanilla game)
