@@ -406,7 +406,21 @@ if (-not $NoUIUpscale -and (Ask "Interface 2x hochskalieren mit Real-ESRGAN + te
     $ui += @(Get-ChildItem (Join-Path $Data "language") -Recurse -File -Filter "*.tga" -ErrorAction SilentlyContinue |
         Where-Object { $_.Directory.Name -eq "fonts" } |
         ForEach-Object { $_.FullName.Substring($Data.TrimEnd('\').Length + 1) })
-    $i = 0; $fonts = 0
+    # does an image have any visible content? samples a 32x32 grid (colour or alpha above 0)
+    Add-Type -AssemblyName System.Drawing
+    function Test-ImageHasContent([string]$path) {
+        $bmp = [System.Drawing.Bitmap]::FromFile($path)
+        try {
+            $sx = [Math]::Max(1, [int]($bmp.Width / 32)); $sy = [Math]::Max(1, [int]($bmp.Height / 32))
+            for ($y = 0; $y -lt $bmp.Height; $y += $sy) {
+                for ($x = 0; $x -lt $bmp.Width; $x += $sx) {
+                    if ($bmp.GetPixel($x, $y).ToArgb() -ne 0) { return $true }
+                }
+            }
+            return $false
+        } finally { $bmp.Dispose() }
+    }
+    $i = 0; $fonts = 0; $upFailed = 0
     foreach ($rel in $ui) {
         $i++
         $f = Get-Item (Join-Path $Data $rel)
@@ -432,7 +446,13 @@ if (-not $NoUIUpscale -and (Ask "Interface 2x hochskalieren mit Real-ESRGAN + te
         Copy-Item $plain "$tmp\$base.$ext" -Force
         Invoke-Tool $texconv @("-nologo", "-y", "-ft", "png", "-o", $tmp, "$tmp\$base.$ext")
         Invoke-Tool $esrgan @("-i", "$tmp\$base.png", "-o", "$tmp\$base.up.png", "-n", "realesr-animevideov3", "-s", "2")
-        if (-not (Test-Path "$tmp\$base.up.png")) { Say "    skipped (upscale failed)" Yellow; continue }
+        if (-not (Test-Path "$tmp\$base.up.png")) { Say "    skipped (upscale failed)" Yellow; $upFailed++; continue }
+        # Real-ESRGAN writes a correctly sized but completely empty image when the GPU fails (e.g. "vkQueueSubmit
+        # failed", no GPU access in a remote session) and still exits without an error: such a texture would make
+        # the interface invisible. The original texture is kept instead.
+        if ((Test-ImageHasContent "$tmp\$base.png") -and -not (Test-ImageHasContent "$tmp\$base.up.png")) {
+            Say "    skipped (the upscaler produced an empty image - original kept)" Yellow; $upFailed++; continue
+        }
         if ($mips -gt 1) { $mipArg = "0" } else { $mipArg = "1" }
         Invoke-Tool $texconv @("-nologo", "-y", "-ft", $ext, "-f", $fmt, "-m", $mipArg, "-o", $tmp, "$tmp\$base.up.png")
         if (-not (Test-Path "$tmp\$base.up.$ext")) { Say "    skipped (conversion failed)" Yellow; continue }
@@ -443,6 +463,10 @@ if (-not $NoUIUpscale -and (Ask "Interface 2x hochskalieren mit Real-ESRGAN + te
     }
     Set-Content (Join-Path $Mods "ui_hd.sizes.txt") $manifest
     Say "  ui_hd: $($manifest.Count) interface textures, $fonts font pages" Green
+    if ($upFailed) {
+        Say "  $upFailed file(s) could not be upscaled and keep the original look. The upscaler needs the graphics card:" Yellow
+        Say "  run the installer from a normal desktop session (not remote/RDP), with current graphics drivers." Yellow
+    }
 }
 
 Remove-Item $Work -Recurse -Force

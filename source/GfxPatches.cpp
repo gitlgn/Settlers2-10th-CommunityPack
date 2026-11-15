@@ -74,6 +74,21 @@ namespace GfxPatches {
             iniOn(iniPath, "ImprovedTerrain", "on") ? 1 : 0, iniFloat(iniPath, "TerrainDetail", 0.5f, 0.0f, 1.0f),
             iniOn(iniPath, "ImprovedWater", "on") ? 1 : 0, iniOn(iniPath, "ImprovedObjects", "on") ? 1 : 0,
             iniFloat(iniPath, "UnitRimLight", 0.5f, 0.0f, 1.0f));
+        // The shader packs and the post-processing switch change which shader sources the game compiles. Its cache is
+        // keyed by file name only, so after switching a pack it kept running shaders compiled from the other set
+        // (seen on a second PC: the main menu stayed blue after a run with the packs off). Recording them here makes
+        // every pack switch a change of this file, which clears the cache below.
+        {
+            char packs[256], m[16], pf[16];
+            auto mod = [&](const char* key) {
+                GetPrivateProfileStringA("Mods", key, "on", m, sizeof(m), iniPath);
+                return (_stricmp(m, "off") && _stricmp(m, "false") && strcmp(m, "0")) ? 1 : 0;
+            };
+            GetPrivateProfileStringA("Graphics", "PostFX", "on", pf, sizeof(pf), iniPath);
+            _snprintf_s(packs, sizeof(packs), _TRUNCATE, "// packs: smooth_shadows %d, sharp_shadows %d, postfx %d, lod_fix %d; PostFX %s\r\n",
+                        mod("SmoothShadows"), mod("SharpShadows"), mod("ImprovedPostFX"), mod("LODFix"), pf);
+            strncat_s(text, sizeof(text), packs, _TRUNCATE);
+        }
         // rewrite only on change (keeps the file date stable)
         char old[1024] = "";
         FILE* f = nullptr;
