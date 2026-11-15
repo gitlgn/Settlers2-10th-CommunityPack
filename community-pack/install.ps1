@@ -52,6 +52,20 @@ if (Get-Process S2DNG -ErrorAction SilentlyContinue) { throw "Please close the g
 Say "Settlers II 10th Anniversary - Community Pack" Cyan
 Say "Game folder: $GameDir"
 
+# Game folder below Program Files: the game runs without admin rights, so Windows redirects everything it writes into
+# the game folder (pack switching at game start, engine settings, the shader settings file) to the user's VirtualStore
+# and prefers those copies on every read. Stale copies would hide the files installed now: they are removed (the game
+# writes what it needs again at the next start). bin\ (d3d9.ini settings, logs) stays.
+$VirtualStore = Join-Path $env:LOCALAPPDATA ("VirtualStore" + $GameDir.Substring(2))
+foreach ($sub in "data", "mods") {
+    $vs = Join-Path $VirtualStore $sub
+    if (Test-Path $vs) {
+        $n = @(Get-ChildItem $vs -Recurse -File -ErrorAction SilentlyContinue).Count
+        Remove-Item $vs -Recurse -Force
+        Say "VirtualStore: $n stale file(s) in $sub removed"
+    }
+}
+
 # PE header flag IMAGE_FILE_LARGE_ADDRESS_AWARE (0x20): lets the 32-bit game use 4 GB instead of 2 GB
 function Get-LAAOffset([byte[]]$b) { return [BitConverter]::ToInt32($b, 0x3C) + 4 + 18 }
 function Get-ExeHashWithoutLAA([string]$path) {

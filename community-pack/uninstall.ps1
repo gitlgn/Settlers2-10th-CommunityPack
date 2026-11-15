@@ -37,6 +37,18 @@ if (Test-Path "$Bin\d3d9.dll.communitypatch") {
 }
 
 Remove-Item (Join-Path $Data "gfx\fx_20\community_settings.inc") -ErrorAction SilentlyContinue
+# Game folder below Program Files: what the game wrote at runtime (pack files switched at game start, engine.xml in
+# plain text, the shader settings file) sits in the user's VirtualStore and overrides the restored originals - with
+# the previous d3d9.dll a plain engine.xml makes the game crash on start. bin\ (settings, logs) stays.
+$VirtualStore = Join-Path $env:LOCALAPPDATA ("VirtualStore" + $GameDir.Substring(2))
+foreach ($sub in "data", "mods") {
+    $vs = Join-Path $VirtualStore $sub
+    if (Test-Path $vs) {
+        $n = @(Get-ChildItem $vs -Recurse -File -ErrorAction SilentlyContinue).Count
+        Remove-Item $vs -Recurse -Force
+        Write-Host "VirtualStore: $n file(s) in $sub removed"
+    }
+}
 
 if (Test-Path "$Bin\S2DNG.exe.laa") {
     # clear the large-address-aware flag again (restores the original S2DNG.exe byte for byte)
