@@ -400,129 +400,11 @@ namespace Overlay {
                 }
             }
             tx->UnlockRect(0);
-            // diagnostics: read the texture back - does it hold what was written? (pixels with alpha, white ones)
-            if (nlog < 20 && SUCCEEDED(tx->LockRect(0, &lr, nullptr, D3DLOCK_READONLY))) {
-                unsigned withAlpha = 0, white = 0, srcAlpha = 0;
-                for (int y = 0; y < t->Height; y++) {
-                    const DWORD* p = (const DWORD*)((const BYTE*)lr.pBits + y * lr.Pitch);
-                    const ImU32* src = (const ImU32*)t->GetPixelsAt(0, y);
-                    for (int x = 0; x < t->Width; x++) {
-                        if (p[x] >> 24) withAlpha++;
-                        if ((p[x] & 0xFFFFFF) == 0xFFFFFF) white++;
-                        if (src[x] >> 24) srcAlpha++;
-                    }
-                }
-                tx->UnlockRect(0);
-                char b[160];
-                _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: atlas readback: %u pixels with alpha (source %u), %u white, pitch %d",
-                            withAlpha, srcAlpha, white, lr.Pitch);
-                logf("%s", b);
-            }
         }
         t->SetStatus(ImTextureStatus_OK);
     }
 
     // diagnostics: the back buffer right after the overlay draw, saved once as bin\menu_<what>.bmp (MSAA resolved)
-    // diagnostics: four 64x64 test fields at the top left, each one step further down the drawing pipeline
-    // (1 red: Clear, 2 green: shader draw from memory, 3 blue: shader draw from a vertex buffer, 4: font texture)
-    static void drawTestFields(IDirect3DDevice9* dev, IDirect3DTexture9* tex) {
-        struct V { float x, y, z, w; DWORD c; float u, v; };
-        auto quad = [](V* q, float x0, DWORD c, float u0, float v0, float u1, float v1) {
-            float y0 = 0.0f, x1 = x0 + 64.0f, y1 = 64.0f;
-            q[0] = { x0 - 0.5f, y0 - 0.5f, 0, 1, c, u0, v0 }; q[1] = { x1 - 0.5f, y0 - 0.5f, 0, 1, c, u1, v0 }; q[2] = { x1 - 0.5f, y1 - 0.5f, 0, 1, c, u1, v1 };
-            q[3] = { x0 - 0.5f, y0 - 0.5f, 0, 1, c, u0, v0 }; q[4] = { x1 - 0.5f, y1 - 0.5f, 0, 1, c, u1, v1 }; q[5] = { x0 - 0.5f, y1 - 0.5f, 0, 1, c, u0, v1 };
-        };
-        HRESULT h[4] = { E_FAIL, E_FAIL, E_FAIL, E_FAIL };
-        dev->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-        dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        D3DRECT r = { 0, 0, 64, 64 };
-        h[0] = dev->Clear(1, &r, D3DCLEAR_TARGET, 0xFFFF0000, 1.0f, 0);
-        // white texel of the font atlas: ImGui keeps it at the very first pixels; a full-quad sample of the atlas instead
-        // shows the glyphs themselves (step 4)
-        IDirect3DTexture9* white = nullptr;
-        if (SUCCEEDED(dev->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &white, nullptr))) {
-            D3DLOCKED_RECT lr;
-            if (SUCCEEDED(white->LockRect(0, &lr, nullptr, 0))) { *(DWORD*)lr.pBits = 0xFFFFFFFF; white->UnlockRect(0); }
-        }
-        V q[6];
-        dev->SetTexture(0, white);
-        quad(q, 64, 0xFF00FF00, 0, 0, 1, 1);
-        h[1] = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, q, sizeof(V));
-        IDirect3DVertexBuffer9* vbuf = nullptr;
-        if (SUCCEEDED(dev->CreateVertexBuffer(sizeof(q), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &vbuf, nullptr))) {
-            void* p = nullptr;
-            quad(q, 128, 0xFF0000FF, 0, 0, 1, 1);
-            if (SUCCEEDED(vbuf->Lock(0, 0, &p, 0))) { memcpy(p, q, sizeof(q)); vbuf->Unlock(); }
-            dev->SetStreamSource(0, vbuf, 0, sizeof(V));
-            h[2] = dev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, 2);
-            dev->SetStreamSource(0, nullptr, 0, 0);
-            vbuf->Release();
-        }
-        dev->SetTexture(0, tex);
-        quad(q, 192, 0xFFFFFFFF, 0, 0, 1, 1);
-        h[3] = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, q, sizeof(V));
-        if (white) white->Release();
-        char b[200];
-        _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: test fields: clear 0x%08lX, draw from memory 0x%08lX, vertex buffer 0x%08lX, font texture 0x%08lX (texture %p)",
-                    h[0], h[1], h[2], h[3], (void*)tex);
-        logf("%s", b);
-        if (tex) {
-            D3DSURFACE_DESC td = {};
-            tex->GetLevelDesc(0, &td);
-            _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: font texture: %ux%u format %d pool %d usage %lX levels %lu",
-                        td.Width, td.Height, (int)td.Format, (int)td.Pool, td.Usage, tex->GetLevelCount());
-            logf("%s", b);
-        }
-
-        // second row of fields (x 256..511): white textures made in different ways, all must come out white
-        auto fill = [](IDirect3DTexture9* t, DWORD c) {
-            D3DLOCKED_RECT lr; D3DSURFACE_DESC d = {};
-            if (!t || FAILED(t->GetLevelDesc(0, &d)) || FAILED(t->LockRect(0, &lr, nullptr, 0))) return E_FAIL;
-            for (UINT y = 0; y < d.Height; y++) { DWORD* p = (DWORD*)((BYTE*)lr.pBits + y * lr.Pitch); for (UINT x = 0; x < d.Width; x++) p[x] = c; }
-            return t->UnlockRect(0);
-        };
-        IDirect3DTexture9 *t5 = nullptr, *t6 = nullptr, *t7 = nullptr, *t7s = nullptr, *t8 = nullptr;
-        HRESULT c5 = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t5, nullptr);
-        HRESULT f5 = fill(t5, 0xFFFFFFFF);
-        HRESULT c6 = dev->CreateTexture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t6, nullptr);
-        HRESULT f6 = fill(t6, 0xFFFFFFFF);
-        HRESULT c7 = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &t7, nullptr);
-        HRESULT c7s = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &t7s, nullptr);
-        HRESULT f7 = fill(t7s, 0xFFFFFFFF);
-        HRESULT u7 = (t7 && t7s) ? dev->UpdateTexture(t7s, t7) : E_FAIL;
-        // 8: the atlas content copied into a brand-new managed texture of the same size
-        HRESULT c8 = E_FAIL, f8 = E_FAIL;
-        if (tex) {
-            D3DSURFACE_DESC td = {};
-            tex->GetLevelDesc(0, &td);
-            c8 = dev->CreateTexture(td.Width, td.Height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t8, nullptr);
-            D3DLOCKED_RECT src, dst;
-            if (SUCCEEDED(c8) && SUCCEEDED(tex->LockRect(0, &src, nullptr, D3DLOCK_READONLY))) {
-                if (SUCCEEDED(t8->LockRect(0, &dst, nullptr, 0))) {
-                    for (UINT y = 0; y < td.Height; y++) memcpy((BYTE*)dst.pBits + y * dst.Pitch, (BYTE*)src.pBits + y * src.Pitch, td.Width * 4);
-                    f8 = t8->UnlockRect(0);
-                }
-                tex->UnlockRect(0);
-            }
-        }
-        IDirect3DTexture9* ts[4] = { t5, t6, t7, t8 };
-        HRESULT d[4] = { E_FAIL, E_FAIL, E_FAIL, E_FAIL };
-        for (int i = 0; i < 4; i++) {
-            if (!ts[i]) continue;
-            dev->SetTexture(0, ts[i]);
-            quad(q, 256.0f + 64.0f * i, 0xFFFFFFFF, 0, 0, 1, 1);
-            d[i] = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, q, sizeof(V));
-        }
-        dev->SetTexture(0, nullptr);
-        for (auto* t : { t5, t6, t7, t7s, t8 }) if (t) t->Release();
-        _snprintf_s(b, sizeof(b), _TRUNCATE,
-            "menu: texture fields: 5 managed 512x128 0x%08lX/0x%08lX/0x%08lX, 6 managed 64x64 0x%08lX/0x%08lX/0x%08lX, 7 default+UpdateTexture 0x%08lX/0x%08lX/0x%08lX/0x%08lX/0x%08lX",
-            c5, f5, d[0], c6, f6, d[1], c7, c7s, f7, u7, d[2]);
-        logf("%s", b);
-        _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: texture field 8 (atlas copy) 0x%08lX/0x%08lX/0x%08lX", c8, f8, d[3]);
-        logf("%s", b);
-    }
-
     static void captureBackBuffer(IDirect3DDevice9* dev, IDirect3DSurface9* bb, const char* what) {
         D3DSURFACE_DESC d = {};
         bb->GetDesc(&d);
@@ -559,56 +441,6 @@ namespace Overlay {
         logf("%s", b);
         if (sys) sys->Release();
         if (rt) rt->Release();
-    }
-
-    // diagnostics: device state at the overlay draw (to compare PCs), written once for the hint and once for the menu
-    static const char* g_dumpPending = nullptr;
-    static void dumpState(IDirect3DDevice9* d, ImDrawData* dd, const char* what) {
-        std::string o = std::string("menu: state dump (") + what + ")\n";
-        char b[200];
-        auto add = [&](const char* fmt, ...) { va_list ap; va_start(ap, fmt); _vsnprintf_s(b, sizeof(b), _TRUNCATE, fmt, ap); va_end(ap); o += b; };
-        add("  rs:");
-        for (DWORD r = 7; r <= 209; r++) { DWORD v = 0; if (SUCCEEDED(d->GetRenderState((D3DRENDERSTATETYPE)r, &v))) add(" %lu=%lX", r, v); }
-        add("\n");
-        for (DWORD st = 0; st < 3; st++) {
-            add("  tss%lu:", st);
-            for (DWORD t = 1; t <= 32; t++) { DWORD v = 0; if (SUCCEEDED(d->GetTextureStageState(st, (D3DTEXTURESTAGESTATETYPE)t, &v))) add(" %lu=%lX", t, v); }
-            add("\n  samp%lu:", st);
-            for (DWORD t = 1; t <= 13; t++) { DWORD v = 0; if (SUCCEEDED(d->GetSamplerState(st, (D3DSAMPLERSTATETYPE)t, &v))) add(" %lu=%lX", t, v); }
-            IDirect3DBaseTexture9* tx = nullptr; d->GetTexture(st, &tx);
-            add(" tex=%p", (void*)tx); if (tx) tx->Release();
-            add("\n");
-        }
-        DWORD fvf = 0; d->GetFVF(&fvf);
-        IDirect3DVertexDeclaration9* decl = nullptr; d->GetVertexDeclaration(&decl);
-        IDirect3DVertexShader9* vs = nullptr; d->GetVertexShader(&vs);
-        IDirect3DPixelShader9* ps = nullptr; d->GetPixelShader(&ps);
-        UINT f0 = 0, f1 = 0; d->GetStreamSourceFreq(0, &f0); d->GetStreamSourceFreq(1, &f1);
-        RECT sc = {}; d->GetScissorRect(&sc);
-        D3DVIEWPORT9 v = {}; d->GetViewport(&v);
-        add("  fvf=%lX decl=%p vs=%p ps=%p freq0=%X freq1=%X scissor=%ld,%ld-%ld,%ld viewport=%lu,%lu %lux%lu z %.2f-%.2f\n",
-            fvf, (void*)decl, (void*)vs, (void*)ps, f0, f1, sc.left, sc.top, sc.right, sc.bottom, v.X, v.Y, v.Width, v.Height, v.MinZ, v.MaxZ);
-        if (decl) decl->Release();
-        if (vs) vs->Release();
-        if (ps) ps->Release();
-        IDirect3DSurface9* rts[4] = {};
-        for (DWORD i = 0; i < 4; i++) d->GetRenderTarget(i, &rts[i]);
-        add("  rt0=%p rt1=%p rt2=%p rt3=%p\n", (void*)rts[0], (void*)rts[1], (void*)rts[2], (void*)rts[3]);
-        for (auto* r : rts) if (r) r->Release();
-        if (dd && dd->CmdListsCount > 0) {
-            const ImDrawList* cl = dd->CmdLists[0];
-            for (int i = 0; i < cl->VtxBuffer.Size && i < 4; i++) {
-                const ImDrawVert& w = cl->VtxBuffer[i];
-                add("  vtx%d pos %.1f,%.1f uv %.4f,%.4f col %08X\n", i, w.pos.x, w.pos.y, w.uv.x, w.uv.y, w.col);
-            }
-            for (int i = 0; i < cl->CmdBuffer.Size && i < 4; i++) {
-                const ImDrawCmd& c = cl->CmdBuffer[i];
-                add("  cmd%d clip %.0f,%.0f-%.0f,%.0f tex %p elems %u vtxoff %u idxoff %u\n", i, c.ClipRect.x, c.ClipRect.y, c.ClipRect.z, c.ClipRect.w,
-                    (void*)(intptr_t)c.GetTexID(), c.ElemCount, c.VtxOffset, c.IdxOffset);
-            }
-        }
-        if (!o.empty() && o.back() == '\n') o.pop_back();
-        logf("%s", o.c_str());
     }
 
     // Shader path: on an NVIDIA PC the pre-transformed (XYZRHW) fixed-function draw came out offset with black glyph
@@ -714,7 +546,6 @@ namespace Overlay {
         dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
         dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
         dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-        if (g_dumpPending) { dumpState(dev, dd, g_dumpPending); g_dumpPending = nullptr; }
         const ImVec2 off = dd->DisplayPos;
         for (int n = 0; n < dd->CmdListsCount; n++) {
             const ImDrawList* cl = dd->CmdLists[n];
@@ -868,39 +699,10 @@ namespace Overlay {
             dev->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, 0);
             dev->SetVertexShader(nullptr);
             dev->SetPixelShader(nullptr);
-            static int dlog = 0;
-            if (dlog < 3 || (g_open && dlog < 6)) {
-                D3DSURFACE_DESC bd = {}; bb->GetDesc(&bd);
-                D3DVIEWPORT9 v2 = {}; dev->GetViewport(&v2);
-                ImDrawData* dd = ImGui::GetDrawData();
-                char b[256]; _snprintf_s(b, sizeof(b), _TRUNCATE,
-                    "menu: draw %s back buffer %ux%u ms %d, viewport %lu,%lu %lux%lu, display %.0fx%.0f, lists %d, vertices %d, game viewport %lu,%lu %lux%lu",
-                    g_open ? "menu" : "hint", bd.Width, bd.Height, (int)bd.MultiSampleType, v2.X, v2.Y, v2.Width, v2.Height,
-                    dd ? dd->DisplaySize.x : 0.f, dd ? dd->DisplaySize.y : 0.f, dd ? dd->CmdListsCount : 0, dd ? dd->TotalVtxCount : 0,
-                    vp.X, vp.Y, vp.Width, vp.Height);
-                logf("%s", b);
-                dlog++;
-            }
-            static bool dumpedHint = false, dumpedMenu = false;
-            bool& dumped = g_open ? dumpedMenu : dumpedHint;
-            if (!dumped) { dumped = true; g_dumpPending = g_open ? "menu" : "hint"; }
             hbs = dev->BeginScene();
             if (SUCCEEDED(hbs)) {
                 renderDrawData(dev, ImGui::GetDrawData());
                 dev->EndScene();
-                static bool capHint = false, capMenu = false;
-                bool& cap = g_open ? capMenu : capHint;
-                static int hintFrames = 0;
-                // the hint after a few frames (atlas uploaded), the menu on its third frame
-                if (!cap && (g_open ? ++hintFrames > 2 : ++hintFrames > 30)) {
-                    cap = true; hintFrames = 0;
-                    if (!g_open && SUCCEEDED(dev->BeginScene())) {   // test fields once, in the hint capture
-                        ImTextureData* td = ImGui::GetIO().Fonts->TexData;
-                        drawTestFields(dev, td ? (IDirect3DTexture9*)(intptr_t)td->GetTexID() : nullptr);
-                        dev->EndScene();
-                    }
-                    captureBackBuffer(dev, bb, g_open ? "menu_menu" : "menu_hint");
-                }
             }
         }
         if (bb) bb->Release();
