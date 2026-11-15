@@ -462,9 +462,64 @@ namespace Overlay {
         quad(q, 192, 0xFFFFFFFF, 0, 0, 1, 1);
         h[3] = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, q, sizeof(V));
         if (white) white->Release();
-        char b[160];
+        char b[200];
         _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: test fields: clear 0x%08lX, draw from memory 0x%08lX, vertex buffer 0x%08lX, font texture 0x%08lX (texture %p)",
                     h[0], h[1], h[2], h[3], (void*)tex);
+        logf("%s", b);
+        if (tex) {
+            D3DSURFACE_DESC td = {};
+            tex->GetLevelDesc(0, &td);
+            _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: font texture: %ux%u format %d pool %d usage %lX levels %lu",
+                        td.Width, td.Height, (int)td.Format, (int)td.Pool, td.Usage, tex->GetLevelCount());
+            logf("%s", b);
+        }
+
+        // second row of fields (x 256..511): white textures made in different ways, all must come out white
+        auto fill = [](IDirect3DTexture9* t, DWORD c) {
+            D3DLOCKED_RECT lr; D3DSURFACE_DESC d = {};
+            if (!t || FAILED(t->GetLevelDesc(0, &d)) || FAILED(t->LockRect(0, &lr, nullptr, 0))) return E_FAIL;
+            for (UINT y = 0; y < d.Height; y++) { DWORD* p = (DWORD*)((BYTE*)lr.pBits + y * lr.Pitch); for (UINT x = 0; x < d.Width; x++) p[x] = c; }
+            return t->UnlockRect(0);
+        };
+        IDirect3DTexture9 *t5 = nullptr, *t6 = nullptr, *t7 = nullptr, *t7s = nullptr, *t8 = nullptr;
+        HRESULT c5 = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t5, nullptr);
+        HRESULT f5 = fill(t5, 0xFFFFFFFF);
+        HRESULT c6 = dev->CreateTexture(64, 64, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t6, nullptr);
+        HRESULT f6 = fill(t6, 0xFFFFFFFF);
+        HRESULT c7 = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &t7, nullptr);
+        HRESULT c7s = dev->CreateTexture(512, 128, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &t7s, nullptr);
+        HRESULT f7 = fill(t7s, 0xFFFFFFFF);
+        HRESULT u7 = (t7 && t7s) ? dev->UpdateTexture(t7s, t7) : E_FAIL;
+        // 8: the atlas content copied into a brand-new managed texture of the same size
+        HRESULT c8 = E_FAIL, f8 = E_FAIL;
+        if (tex) {
+            D3DSURFACE_DESC td = {};
+            tex->GetLevelDesc(0, &td);
+            c8 = dev->CreateTexture(td.Width, td.Height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t8, nullptr);
+            D3DLOCKED_RECT src, dst;
+            if (SUCCEEDED(c8) && SUCCEEDED(tex->LockRect(0, &src, nullptr, D3DLOCK_READONLY))) {
+                if (SUCCEEDED(t8->LockRect(0, &dst, nullptr, 0))) {
+                    for (UINT y = 0; y < td.Height; y++) memcpy((BYTE*)dst.pBits + y * dst.Pitch, (BYTE*)src.pBits + y * src.Pitch, td.Width * 4);
+                    f8 = t8->UnlockRect(0);
+                }
+                tex->UnlockRect(0);
+            }
+        }
+        IDirect3DTexture9* ts[4] = { t5, t6, t7, t8 };
+        HRESULT d[4] = { E_FAIL, E_FAIL, E_FAIL, E_FAIL };
+        for (int i = 0; i < 4; i++) {
+            if (!ts[i]) continue;
+            dev->SetTexture(0, ts[i]);
+            quad(q, 256.0f + 64.0f * i, 0xFFFFFFFF, 0, 0, 1, 1);
+            d[i] = dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2, q, sizeof(V));
+        }
+        dev->SetTexture(0, nullptr);
+        for (auto* t : { t5, t6, t7, t7s, t8 }) if (t) t->Release();
+        _snprintf_s(b, sizeof(b), _TRUNCATE,
+            "menu: texture fields: 5 managed 512x128 0x%08lX/0x%08lX/0x%08lX, 6 managed 64x64 0x%08lX/0x%08lX/0x%08lX, 7 default+UpdateTexture 0x%08lX/0x%08lX/0x%08lX/0x%08lX/0x%08lX",
+            c5, f5, d[0], c6, f6, d[1], c7, c7s, f7, u7, d[2]);
+        logf("%s", b);
+        _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: texture field 8 (atlas copy) 0x%08lX/0x%08lX/0x%08lX", c8, f8, d[3]);
         logf("%s", b);
     }
 
@@ -715,8 +770,30 @@ namespace Overlay {
         } else state = 0;
     }
 
+    // The menu keeps the device it was set up with. If the game presents through a different device (some PCs create a
+    // second one), textures and shaders made on the first device cannot be used there: switch to the presenting
+    // device and create them again on it.
+    static void followDevice(IDirect3DDevice9* dev) {
+        if (!dev || dev == g_dev) return;
+        char b[160];
+        _snprintf_s(b, sizeof(b), _TRUNCATE, "menu: presenting device %p differs from the menu's device %p - switching, textures and shaders recreated",
+                    (void*)dev, (void*)g_dev);
+        logf("%s", b);
+        g_dev = dev;
+        for (ImTextureData* t : ImGui::GetPlatformIO().Textures) {
+            if (auto* tx = (IDirect3DTexture9*)(intptr_t)t->GetTexID()) tx->Release();
+            t->SetTexID(ImTextureID_Invalid);
+            if (t->Status != ImTextureStatus_Destroyed) t->SetStatus(ImTextureStatus_WantCreate);
+        }
+        if (g_vs) { g_vs->Release(); g_vs = nullptr; }
+        if (g_ps) { g_ps->Release(); g_ps = nullptr; }
+        if (g_decl) { g_decl->Release(); g_decl = nullptr; }
+        g_shaderTried = false;
+    }
+
     void onPresent(IDirect3DDevice9* dev) {
         if (!g_ready) return;
+        followDevice(dev);
         compareShots(dev);
         attachWindow();
         bool down = (GetAsyncKeyState(g_key) & 0x8000) != 0;
